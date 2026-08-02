@@ -1,5 +1,5 @@
 # ============================================================
-# Clash-Merge 全局扩展覆写配置 v260712
+# Clash-Merge 全局扩展覆写配置 v260802
 # 自适应路由受限网络服务
 # 规则集驱动，可独立运行（依赖网络拉取 rule-providers）。流程：订阅 → Merge → Script → CVR → Mihomo
 # ⚠️ 严禁声明 mode 字段（CVR 独占，冲突崩溃）
@@ -24,7 +24,7 @@ dns:
   ipv6: false                            # 关闭 IPv6，避免纯 IPv4 代理环境下连接错误，若全链路支持 IPv6 且代理可出站，可改为 true
 
   # ── Fake-IP 范围 ──
-  fake-ip-range: 198.18.0.0/15           # RFC 2544 预留段完整范围，容量充足
+  fake-ip-range: 198.18.0.0/16           # RFC 2544 预留段完整范围，容量充足
 
   # ── Fake-IP 白名单（强制走真实 IP 解析） ──
   fake-ip-filter:
@@ -43,7 +43,7 @@ dns:
     - "stun.*.*.*"
     - "+.stun.*.*"
     - "+.stun.*.*.*"
-    - "+.l.google.com"     # 覆盖整个 l.google.com 子域（范围稍宽）
+    - "+.l.google.com"     # 覆盖 l.google.com 全子域，同时补齐 stun1./stun2. 等数字后缀命名变体（stun.*.* 系列模式仅匹配字面 "stun." 前缀，无法覆盖 "stun1." 这类变体）
     # 系统连通性探测
     - "*.msftconnecttest.com"
     - "*.msftncsi.com"
@@ -171,8 +171,8 @@ sniffer:
 # include-all 引入所有出站节点（不含嵌套组），切换订阅免维护；若无裸节点则组为空，所有经此组的连接立即失败。
 
 x-filters:            # 顶层定义，内核忽略未知字段，仅作 YAML 锚点宿主
-  basic: &filter_basic '^(?!.*(剩余|到期|官网|套餐|重置|群|客服)).+$'
-  no-hk: &filter_no_hk '^(?i)(?!.*(香港|HK|Hong\s*Kong|🇭🇰))(?!.*(剩余|到期|官网|套餐|重置|群|客服)).+$'
+  basic: &filter_basic '^(?!.*(剩余|流量|到期|过期|官网|网址|网站|套餐|重置|群|客服)).+$'
+  no-hk: &filter_no_hk '^(?i)(?!.*(香港|HK|Hong\s*Kong|🇭🇰))(?!.*(剩余|流量|到期|过期|官网|网址|网站|套餐|重置|群|客服)).+$'
 
 proxy-groups:
   - name: 🎛️ 动态选择 # 🛡️ 主出口，硬编码组名。修改组名须同步更新所有 rules 引用
