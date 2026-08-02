@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260802
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260803
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -138,8 +138,7 @@ function main(config) {
     ];
     // 设计说明：以下代理组识别、数据层、规则组装原本各自有一批 return config 提前退出点，
     // 会绕过下方"Hosts DNS 覆写"节的执行——而 Hosts 覆写在逻辑上并不依赖代理组是否找到。
-    // 现在统一改为 throw，由本 try 块外层的 catch 接住并继续执行 Hosts，与规则组装本身
-    // "失败也要继续跑 Hosts" 的既有设计意图保持一致。
+    // 现在统一改为 throw，由本 try 块外层的 catch 接住并继续执行 Hosts，与规则组装本身"注入失败时仍需执行 Hosts 覆写" 的既有设计意图保持一致。
     try {
     const EXCLUDED_NAMES = new Set(["DIRECT","REJECT","REJECT-DROP","COMPATIBLE","DEFAULT","MATCH","PASS"]);
     const FALLBACK_NAMES = new Set(["GLOBAL"]);
@@ -234,7 +233,7 @@ function main(config) {
             if (!_hit) {
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 未在 proxy-groups 中找到同名条目，回退到自动识别`);
             } else if (!_hit.eligible) {
-                // 提前用 eligible 拦一道，避免"这里打✅、下面排除断言又打❌"这种自相矛盾的日志顺序
+                // 提前用 eligible 拦一道，避免"这里预选成功、下面排除断言又将其剔除"这种前后矛盾的日志
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 命中排除名单（DIRECT/REJECT 等保留名或"全局/所有"类兜底名），回退到自动识别`);
             } else if (!VALID_PROXY_TYPES.has(_hit.g?.type) || !hasNodes(_hit)) {
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 存在但类型不受支持或没有可用节点（type: ${_hit.g?.type}, ${_nodeDesc(_hit.g)}），回退到自动识别`);
