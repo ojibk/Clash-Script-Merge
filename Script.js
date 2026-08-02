@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260713
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260802
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -22,6 +22,7 @@ function main(config) {
     const ENABLE_CLIENT_FINGERPRINT    = true;            // TLS 指纹注入开关（为代理节点批量添加 client-fingerprint）
     const DEFAULT_FINGERPRINT          = "chrome";        // TLS 指纹预设
     const FINGERPRINT_SKIP             = [];              // 指纹跳过名单：节点名含这些关键词则不注入指纹
+    const PRIMARY_GROUP_NAME           = "";              // 手动精确指定总控代理组名（留空则启用自动识别 tier2~tier6；tier1 即本字段，留空后不参与自动识别）；填写时必须与代理组名完全一致（区分大小写），仅此一处生效，不做模糊匹配
     const fireflyUseProxy              = ENABLE_FIREFLY && ENABLE_BLOCK;  // 派生开关：决定 Firefly 规则的路由目标与动作（allow层代理 / block层拦截）
 
     // ═══════════════ 防御性检查 ═══════════════
@@ -32,6 +33,7 @@ function main(config) {
     if (!Array.isArray(config["proxy-groups"])) config["proxy-groups"] = [];
 
     if (ENABLE_FIREFLY && !ENABLE_BLOCK) console.warn("⚠️ Firefly 放行需 ENABLE_BLOCK=true");
+    if (ENABLE_FIREFLY && ENABLE_AGGRESSIVE && !ENABLE_BLOCK) console.warn("⚠️ ENABLE_BLOCK=false 时 aggressiveRules 会对 adobe.io 无差别 REJECT-DROP，Firefly 将被直接拦掉，而不只是放行逻辑不生效");
     if (ENABLE_PROCESS_RULE && config["find-process-mode"] !== "strict" && config["find-process-mode"] !== "always") {
         console.warn(`⚠️ 进程规则要求 find-process-mode=strict/always，当前 [${config["find-process-mode"] ?? "未设置"}]`);
     }
@@ -115,7 +117,7 @@ function main(config) {
             config.proxies = config.proxies.map(p => {
                 if (typeof p !== 'object' || !p) return p;
                 if (Object.prototype.hasOwnProperty.call(p, 'client-fingerprint')) { exist++; return p; }
-                const name = (p.name || "").toLowerCase();
+                const name = (typeof p.name === "string" ? p.name : "").toLowerCase(); // 防御：节点名若被 YAML 解析为非字符串（如纯数字未加引号），避免 .toLowerCase() 抛异常导致整脚本失败
                 if (_skipKw.some(k => name.includes(k)) || _skipRe.some(r => r.test(p.name || ""))) { skip++; return p; }
                 inj++;
                 p['client-fingerprint'] = _effectiveFP;
@@ -127,6 +129,19 @@ function main(config) {
 
     // ═══════════════ 1. 识别代理策略组 ═══════════════
     let proxyGroupName = null;
+    // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为第 4 节 Hosts DNS 覆写
+    // 需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
+    const BACKDOOR_BASE_DOMAINS = [
+        "966v26.com",                            // 后门主域
+        "vposy.com",                             // 知名非官方修改补丁作者域名
+        "api.pzz.cn",                            // 国内后门回传接口
+        // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
+    ];
+    // 设计说明：以下代理组识别、数据层、规则组装原本各自有一批 return config 提前退出点，
+    // 会绕过下方"4. Hosts DNS 覆写"的执行——而 Hosts 覆写在逻辑上并不依赖代理组是否找到。
+    // 现在统一改为 throw，由本 try 块外层的 catch 接住并继续执行 Hosts，与规则组装本身
+    // "失败也要继续跑 Hosts" 的既有设计意图保持一致。
+    try {
     const EXCLUDED_NAMES = new Set(["DIRECT","REJECT","REJECT-DROP","COMPATIBLE","DEFAULT","MATCH","PASS"]);
     const FALLBACK_NAMES = new Set(["GLOBAL"]);
     const EXCLUDED_CN_RE = /^(?:全(?:部|网|球)|所有|默认|直连|拒绝)$/;
@@ -139,17 +154,17 @@ function main(config) {
         const _overlap = [...FALLBACK_NAMES].filter(n => EXCLUDED_NAMES.has(n));
         if (_overlap.length) {
             console.error(`❌ 配置断言失败：FALLBACK_NAMES ∩ EXCLUDED_NAMES 非空: ${_overlap.join(", ")}`);
-            return config;
+            throw new Error("proxy-group-setup-aborted: FALLBACK_NAMES/EXCLUDED_NAMES 断言失败");
         }
     }
     // 运行时断言：FALLBACK_CN_RE 与 EXCLUDED_CN_RE 对"全局"必须互斥
     if (FALLBACK_CN_RE.test("全局") && EXCLUDED_CN_RE.test("全局")) {
         console.error(`❌ 配置断言失败："全局"同时匹配 FALLBACK_CN_RE 和 EXCLUDED_CN_RE`);
-        return config;
+        throw new Error("proxy-group-setup-aborted: FALLBACK_CN_RE/EXCLUDED_CN_RE 断言失败");
     }
 
     // ═══════════════ 基础控制字符集（清洗和校验共用） ═══════════════
-    const _CONTROL_CHARS = "\u0000-\u001F\u007F\u0085\u00AD\u061C\u200B-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF";
+    const _CONTROL_CHARS = "\u0000-\u001F\u007F\u0085\u00AD\u061C\u2000-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF"; // \u2000-\u200A 为 EN QUAD 等 Unicode 通用标点空格变体，出现在名称中间时不受 .trim() 影响
 
     const _SANITIZE_RE = new RegExp(`[${_CONTROL_CHARS}]`, "gu");
     const sanitizeName = n => (typeof n === "string" && n) ? n.replace(_SANITIZE_RE, '').trim() : "";
@@ -172,7 +187,7 @@ function main(config) {
 
         // 节点来源单一数据源（hasNodes 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
         // ⚠️ 设计取舍说明：hasNodes 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
-        //   若组A仅有1个静态节点，组B有50个 provider 节点，some() 对两者均返回 true；在 tier1/tier2 的 find() 中，匹配的第一个有节点组即被选中，而非“节点最多”的组。
+        //   若组A仅有1个静态节点，组B有50个 provider 节点，some() 对两者均返回 true；在 tier2/tier4 的 find() 中，匹配的第一个有节点组即被选中，而非“节点最多”的组。
         // 原因：1. 静态节点通常是用户精选的高质量节点，“少而精”可能优于“多而杂”；2. 避免为统计节点总数引入额外遍历开销。
         const NODE_SOURCE_CHECKS = [
             {
@@ -202,7 +217,7 @@ function main(config) {
             const _invalid = NODE_SOURCE_CHECKS.filter(c => typeof c.test !== "function" || typeof c.desc !== "function");
             if (_invalid.length) {
                 console.error(`❌ NODE_SOURCE_CHECKS 配置错误：${_invalid.length} 条记录缺少 test/desc 函数`);
-                return config;
+                throw new Error("proxy-group-setup-aborted: NODE_SOURCE_CHECKS 配置错误");
             }
         }
 
@@ -212,28 +227,53 @@ function main(config) {
             return hit ? hit.desc(g) : "0 节点";
         };
 
-        // tier（层级）多级降级识别：tier1 优先匹配名称含关键词的合格策略组，tier2 放宽名称限制，tier3 降级使用兜底组，tier4 最终容错
-        // tier1-A: 关键词命中，独占最高优先级——不受数组声明顺序影响
-        let entry = prepped.find(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) &&
-            _KW_RE.test(e.clean) && hasNodes(e));
-        // tier1-B: 仅当 tier1a 全表落空时，才接受纯 include-all（此时数组顺序才会成为决定因素）
+        // tier（层级）多级降级识别：tier1 优先采用手动精确指定，tier2 匹配名称含关键词的合格策略组，tier3 纯 include-all，tier4 放宽名称限制，tier5 降级使用兜底组，tier6 最终容错
+        // tier1: 手动精确指定（PRIMARY_GROUP_NAME 非空时）——完全绕开下面的启发式识别，把选择权交还给用户
+        let entry = null;
+        if (PRIMARY_GROUP_NAME) {
+            const _hit = prepped.find(e => e.g?.name === PRIMARY_GROUP_NAME);
+            if (!_hit) {
+                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 未在 proxy-groups 中找到同名条目，回退到自动识别`);
+            } else if (!_hit.eligible) {
+                // 提前用 eligible 拦一道，避免"这里打✅、下面排除断言又打❌"这种自相矛盾的日志顺序
+                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 命中排除名单（DIRECT/REJECT 等保留名或"全局/所有"类兜底名），回退到自动识别`);
+            } else if (!VALID_PROXY_TYPES.has(_hit.g?.type) || !hasNodes(_hit)) {
+                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 存在但类型不受支持或没有可用节点（type: ${_hit.g?.type}, ${_nodeDesc(_hit.g)}），回退到自动识别`);
+            } else {
+                entry = _hit;
+                console.log(`✅ 代理组（手动指定 PRIMARY_GROUP_NAME）: [${entry.g.name}]`);
+            }
+        }
+        // tier2: 关键词命中。多个候选并列时，优先取 type === "select"（人工总控选择组的惯例类型），
+        // 命中多个候选时打印诊断日志列出全部候选，避免地区级 url-test 组（如含"自动"）或展示性 select 组
+        // （如含"订阅"的"📊 订阅信息"）单纯因为排在数组前面而被静默选中。仍需强调：这不是"顺序无关"——
+        // 无 select 候选、或多个候选类型相同时，胜出者依旧由数组声明顺序决定。
+        if (!entry) {
+            const _tier2Candidates = prepped.filter(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) &&
+                _KW_RE.test(e.clean) && hasNodes(e));
+            entry = _tier2Candidates.find(e => e.g?.type === "select") || _tier2Candidates[0];
+            if (_tier2Candidates.length > 1) {
+                console.warn(`⚠️ tier2 命中 ${_tier2Candidates.length} 个候选组，已选 [${entry?.g?.name}] (type: ${entry?.g?.type})，其余候选: ${_tier2Candidates.filter(e => e !== entry).map(e => `[${e.g.name}](${e.g.type})`).join("、")}`);
+            }
+        }
+        // tier3: 仅当 tier2 全表落空时，才接受纯 include-all（此时数组顺序才会成为决定因素）
         if (!entry) entry = prepped.find(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) &&
             (e.g?.["include-all"] === true || e.g?.["include-all"] === "true") && hasNodes(e));
-        // tier2: 放宽名称限制
+        // tier4: 放宽名称限制
         if (!entry) entry = prepped.find(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) && hasNodes(e));
-        // tier3: 降级使用兜底组
+        // tier5: 降级使用兜底组
         if (!entry) {
             entry = prepped.find(e => e.fallback && VALID_PROXY_TYPES.has(e.g?.type) && hasNodes(e));
             if (entry) console.warn(`⚠️ 降级使用兜底组 [${entry.g.name}]`);
         }
-        // tier4: 最终容错
+        // tier6: 最终容错
         if (!entry) {
             entry = prepped.find(e => e.eligible && e.g?.type != null && !NONROUTABLE_TYPES.has(e.g?.type) && hasNodes(e));
             if (entry) console.warn(`🚨 最终容错选取 [${entry.g.name}]`);
         }
 
         if (entry?.g?.name) {
-            if (entry.g.name !== entry.clean) { console.error(`❌ 代理组名含首尾空格或不可见字符`); return config; }
+            if (entry.g.name !== entry.clean) { console.error(`❌ 代理组名含首尾空格或不可见字符`); throw new Error("proxy-group-setup-aborted: 代理组名含首尾空格或不可见字符"); }
             proxyGroupName = entry.g.name;
             console.log(`${entry.fallback ? "⚠️" : "✅"} 代理组: [${proxyGroupName}] (type: ${entry.g.type ?? "?"})`);
         } else {
@@ -242,27 +282,29 @@ function main(config) {
                 const status = !eligible ? "❌" : (fallback ? "⚠️" : "✅");
                 console.log(`   ${idx + 1}. ${status} [${g?.name}] (${g?.type ?? "?"}, ${_nodeDesc(g)})`);
             });
-            return config;
+            throw new Error("proxy-group-setup-aborted: 无可用代理组");
         }
     } else {
         console.error("❌ proxy-groups 为空，中止注入");
-        return config;
+        throw new Error("proxy-group-setup-aborted: proxy-groups 为空");
     }
 
     // 代理组排除断言与 Token 断言
     {
         const s = sanitizeName(proxyGroupName);
         if (!s || EXCLUDED_NAMES.has(s.toUpperCase()) || EXCLUDED_CN_RE.test(s)) {
-            console.error(`❌ 代理组排除断言触发：[${proxyGroupName}]`); return config;
+            console.error(`❌ 代理组排除断言触发：[${proxyGroupName}]`); throw new Error("proxy-group-setup-aborted: 代理组排除断言触发");
         }
     }
-    // 控制字符 + 代理组名中不允许的结构字符 ,[]{}（与 _SANITIZE_RE 共享 _CONTROL_CHARS）
-    if (new RegExp(`[,\\[\\]{}${_CONTROL_CHARS}]`, "u").test(proxyGroupName)) {
-        console.error(`❌ 代理组名含非法字符`); return config;
+    // 结构字符校验：proxyGroupName 若含 ,[]{} 会破坏 "TYPE,domain,ACTION" 规则字符串结构
+    // （原正则里还拼了 _CONTROL_CHARS，但那部分是死代码：上面的 entry.g.name !== entry.clean 已经
+    // 保证 proxyGroupName 不含 _CONTROL_CHARS 里的任何字符，走到这里不可能再触发，故删除以免误导）
+    if (/[,\[\]{}]/u.test(proxyGroupName)) {
+        console.error(`❌ 代理组名含非法字符`); throw new Error("proxy-group-setup-aborted: 代理组名含非法字符");
     }
     // 防御性校验：确保识别的代理组仍存在于原数组中
     if (!config["proxy-groups"].some(g => g?.name === proxyGroupName)) {
-        console.error(`❌ 代理组 [${proxyGroupName}] 不存在`); return config;
+        console.error(`❌ 代理组 [${proxyGroupName}] 不存在`); throw new Error("proxy-group-setup-aborted: 代理组不存在于原数组");
     }
 
     // ═══════════════ 2. 数据层 ═══════════════
@@ -330,7 +372,10 @@ function main(config) {
     const udpBlock = [
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.io)),REJECT",
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.com)),REJECT",
-        // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobelogin.com)),REJECT", // Firefly 禁用时已由 adobeSharedDeps 子域规则覆盖，Firefly 启用时 UDP 由 allow 层路由至代理组
+        // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobelogin.com)),REJECT", // 【覆盖范围说明，非"已解决"】此规则本可覆盖 adobelogin.com 裸域+全部子域；
+        // 目前被禁用的理由是 adobeSharedDeps 里的 "ims-na1.adobelogin.com" 已经用 pushSuffix（无协议限定）覆盖了这一个具体子域的 UDP 流量。
+        // 但如果 Adobe 还有其他 *.adobelogin.com 子域走 UDP（未抓包确认），这条规则被禁用意味着那些子域的 UDP 目前不受本层拦截。
+        // 是否要启用本行、把覆盖范围扩大到整个 adobelogin.com，取决于是否有抓包证据，这里不替你做决定。
         // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobestats.io)),REJECT", // SUFFIX 规则的 adobestats.io（无协议条件）已覆盖所有协议，此处冗余
         // `AND,((NETWORK,UDP),(DOMAIN-REGEX,${_ADOBE_RAND_RE})),REJECT`, // 已被同层 adobe.io 的 UDP SUFFIX 规则覆盖，此处冗余
     ];
@@ -352,6 +397,15 @@ function main(config) {
         "senseicore.adobe.io",                    // Sensei AI 服务核心
         "senseimds.adobe.io",                     // Sensei 模型分发服务
     ];
+    // 运行时断言：pushFirefly 只对上面这些域名生成 TCP 限定规则，UDP/QUIC 依赖 udpBlock 的
+    // adobe.io/adobe.com 无协议限定规则兜底拦截——因此这里的每一项都必须落在 adobe.com 或
+    // adobe.io 之下，否则该域名的 UDP 流量在 Firefly 禁用时会漏拦、在启用时会漏放。
+    {
+        const _uncovered = adobeFireflyOnly.filter(d => !/\.(adobe\.com|adobe\.io)$/i.test(d));
+        if (_uncovered.length) {
+            console.error(`❌ adobeFireflyOnly 存在不受 udpBlock 保护的域名，UDP 可能漏放/漏拦: ${_uncovered.join(", ")}`);
+        }
+    }
 
     // ── CorelDRAW 全家桶激活拦截 ──
     const corelSuffix = [
@@ -396,12 +450,7 @@ function main(config) {
     ];
 
     // ── 非官方修改补丁后门 ──
-    const BACKDOOR_BASE_DOMAINS = [
-        "966v26.com",                            // 后门主域
-        "vposy.com",                             // 知名非官方修改补丁作者域名
-        "api.pzz.cn",                            // 国内后门回传接口
-        // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
-    ];
+    // BACKDOOR_BASE_DOMAINS 已上移至 try 块之前声明（第 4 节 Hosts DNS 覆写需要在代理组识别失败时也能访问它）
     const backdoorSuffix = [...BACKDOOR_BASE_DOMAINS];
     const backdoorKeyword = ["966v26"];
 
@@ -575,9 +624,13 @@ function main(config) {
         "ie.sogou.com",                          // 搜狗 IE 插件推广
         "metasogou.com",                         // 搜狗元数据追踪
         "get.sogou.com",                         // 搜狗输入法收集并回传输入的数据。拦截后会影响账号同步、词库更新、问题反馈，但语音输入等其他功能可以正常使用
-        // Flash/PotPlayer
+        // Flash
         "flash.cn",                              // Flash 国内分发域
-        "kakaocorp.com",                         // PotPlayer 母公司 Kakao 统计上报
+        // PotPlayer（注意：以下 Kakao/Daum 分析平台结构域名基于 2019-2020 年的抓包资料与第三方 hosts 名单，建议定期抓包复核）
+        "stat.tiara.kakao.com",                  // Kakao Tiara 分析平台统计上报
+        "track.tiara.daum.net",                  // Daum/Kakao 追踪端点
+        "analytics.ad.daum.net",                 // Daum 广告分析
+        "display.ad.daum.net",                   // Daum 广告展示
         "p1-pc.daum.net",                        // PotPlayer 侧边栏广告
         "p2-pc.daum.net",                        // PotPlayer 侧边栏广告节点 2
         "p1-pc.pdk.daum.net",                    // PotPlayer 广告 CDN 节点
@@ -743,7 +796,7 @@ function main(config) {
     ];
 
     // ═══════════════ 3. 规则组装与注入 ═══════════════
-    try {
+    {
         const LAYER_ORDER = Object.freeze(["allow","block","process","proxy","aggressive","direct"]);
         const layerPools = { allow:[], block:[], process:[], proxy:[], aggressive:[], direct:[] };
         const _orderSet = new Set(LAYER_ORDER);
@@ -836,8 +889,14 @@ function main(config) {
         console.log(`   注入规则数: ${finalPool.length} 条（含首尾哨兵）`);
         console.log(`   总规则数: ${config.rules.length} 条`);
         console.log("=".repeat(28));
+    }
     } catch (err) {
-        console.error("❌ 规则注入异常，继续执行 Hosts:", err);
+        if (err instanceof Error && err.message.startsWith("proxy-group-setup-aborted")) {
+            // 代理组识别阶段的可控中止：具体原因已在上方用 console.error 打印过，这里只说明后续走向
+            console.log("ℹ️ 代理组识别未成功，本次跳过规则注入，继续执行 Hosts DNS 覆写");
+        } else {
+            console.error("❌ 规则注入异常，继续执行 Hosts:", err);
+        }
     }
 
     // ═══════════════ 4. Hosts DNS 覆写 ═══════════════
@@ -877,16 +936,16 @@ function main(config) {
                 const scriptManaged = new Set([...currentManaged, ...LEGACY_CLEANUP_ENTRIES.map(s => s.toLowerCase())]);
 
                 if (DEBUG_FAKEIPFILTER_CLEANUP) {
-                    // 语义匹配：剥离通配符前缀后，判断是否为 BACKDOOR_BASE_DOMAINS 中某项本身或其子域
-                    const isCoveredByCurrent = (entry) => {
-                        const bare = entry.replace(/^[+*]\./, "").toLowerCase();
-                        return BACKDOOR_BASE_DOMAINS.some(d => {
-                            const domain = d.toLowerCase();
-                            return bare === domain || bare.endsWith("." + domain);
-                        });
-                    };
-                    const redundant = LEGACY_CLEANUP_ENTRIES.filter(e => isCoveredByCurrent(e));
-                    if (redundant.length) console.warn("⚠️ 历史托管域名中存在仍属当前活跃集合的冗余条目，建议清理:", redundant);
+                    // 精确匹配：判断该条目是否与 currentManaged（由 BACKDOOR_BASE_DOMAINS 自动生成的
+                    // +.d / d / *.d 三种形式）字符串完全相同。
+                    // ⚠️ 注意，这里必须用精确匹配，不能用"是否落在某个活跃域名的通配范围内"这种语义匹配——
+                    // 实际负责清理 fake-ip-filter 的逻辑（下面的 scriptManaged.has(s)）就是精确字符串匹配，
+                    // 二者标准必须一致，否则会出现"语义上已被覆盖，但精确匹配清理不掉"的条目被误判为可删除。
+                    // 典型例子：BACKDOOR_BASE_DOMAINS 里的 "966v26.com" 只会自动生成 "+.966v26.com" 等 3 种形式，
+                    // 并不包含 "api.966v26.com" 这个具体字符串——若把它当作"已被覆盖"从 LEGACY_CLEANUP_ENTRIES
+                    // 删掉，以后残留在用户 fake-ip-filter 里的这个具体字符串就再也清不掉了。
+                    const redundant = LEGACY_CLEANUP_ENTRIES.filter(e => currentManaged.has(e.toLowerCase()));
+                    if (redundant.length) console.warn("⚠️ 历史托管域名中存在与当前自动生成集合完全重复的冗余条目，可安全清理:", redundant);
                 }
 
                 const existing = new Set(), cleaned = [];
@@ -898,7 +957,10 @@ function main(config) {
                     if (existing.has(s)) continue;
                     existing.add(s); cleaned.push(e);
                 }
-                const newEntries = hijackDomains.filter(d => !existing.has(d.toLowerCase())).sort();
+                // 注：此前这里有一段 .filter(d => !existing.has(d.toLowerCase())) —— 经验证是死代码：
+                // existing 只保留"未被 scriptManaged 命中"的条目，而 hijackDomains 里的每一项都必然在
+                // scriptManaged 中（经由 currentManaged），二者结构上不可能有交集，filter 恒真，故直接删除。
+                const newEntries = [...hijackDomains].sort();
                 config.dns["fake-ip-filter"] = [...cleaned, ...newEntries];
 
                 console.warn("⚠️ Hosts DNS 覆写需在 CVR 开启「启用 DNS」和「使用 Hosts」才生效");
