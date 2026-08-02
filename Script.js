@@ -444,7 +444,6 @@ function main(config) {
     ];
 
     // ── 非官方修改补丁后门 ──
-    // BACKDOOR_BASE_DOMAINS 已上移至 try 块之前声明（第 4 节 Hosts DNS 覆写需要在代理组识别失败时也能访问它）
     const backdoorSuffix = [...BACKDOOR_BASE_DOMAINS];
     const backdoorKeyword = ["966v26"];
 
