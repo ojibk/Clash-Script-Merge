@@ -24,7 +24,7 @@ dns:
   ipv6: false                            # 关闭 IPv6，避免纯 IPv4 代理环境下连接错误，若全链路支持 IPv6 且代理可出站，可改为 true
 
   # ── Fake-IP 范围 ──
-  fake-ip-range: 198.18.0.0/16           # RFC 2544 预留段完整范围，容量充足
+  fake-ip-range: 198.18.0.0/16           # RFC 2544 预留段，/16 子网容量充足
 
   # ── Fake-IP 白名单（强制走真实 IP 解析） ──
   fake-ip-filter:
@@ -144,7 +144,7 @@ geox-url:                       # ⚙️ geodata 下载地址（CF 加速），�
 
 profile:
   store-selected: true          # ⚙️ 策略组选择持久化到 cache.db，防止重启后被重置
-  store-fake-ip: false          # ⚙️ Fake-IP 映射持久化设置，仅 fake-ip 模式有效（需 dns.enhanced-mode: fake-ip），防重启后映射丢失
+  store-fake-ip: false          # ⚙️ Fake-IP 映射持久化设置，仅 fake-ip 模式有效（需 dns.enhanced-mode: fake-ip），true 可防重启后映射丢失
 
 # ░░ 嗅探器 — 纯 IP 连接命中域名规则的关键
 # ⚠️ ECH 盲区：支持 ECH（Encrypted Client Hello）的连接无法嗅探 SNI，
@@ -200,7 +200,7 @@ proxy-groups:
     # hidden: true    # 隐藏策略组
     # proxies:        # 🛡️ 节点紧急降级方案：过滤后无节点时降级到主出口（有穿透含港节点风险）
     #   - 🎛️ 动态选择 # ⚠️ 降级风险：含香港节点，可能导致服务不可用
-    filter: *filter_no_hk
+    filter: *filter_no_hk # 使用前务必确保订阅中存在非港节点
 
 # ============================================================
 # ░░ 规则集 (Rule Providers) — Map 合并，保留订阅条目
