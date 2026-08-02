@@ -455,8 +455,8 @@ function main(config) {
         "mirror3.internetdownloadmanager.com",   // 更新镜像服务器 3
         "idm-patch.com",                         // 非官方修改补丁域
         "idm-update.com",                        // 非官方更新域
+        "tonec.com",                             // IDM 开发商官网
     ];
-    const idmKeyword = ["tonec"];               // IDM 开发商品牌名
     const wondershareSuffix = [
         "activation.wondershare.com",             // Wondershare 激活验证入口
         "license.wondershare.com",                // 许可证验证服务
@@ -814,7 +814,6 @@ function main(config) {
             pushSuffix(backdoorSuffix, "REJECT-DROP", layerPools.block);
             pushKeyword(backdoorKeyword, "REJECT-DROP", layerPools.block);
             pushSuffix(idmSuffix, "REJECT", layerPools.block);
-            pushKeyword(idmKeyword, "REJECT", layerPools.block);
             pushSuffix(wondershareSuffix, "REJECT", layerPools.block);
             pushSuffix(miscSoftwareSuffix, "REJECT", layerPools.block);
             pushDomain(miscSoftwareDomain, "REJECT", layerPools.block);
