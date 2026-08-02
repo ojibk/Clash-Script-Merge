@@ -129,8 +129,7 @@ function main(config) {
 
     // ═══════════════ 1. 识别代理策略组 ═══════════════
     let proxyGroupName = null;
-    // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为第 4 节 Hosts DNS 覆写
-    // 需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
+    // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为后面的 Hosts DNS 覆写节需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
     const BACKDOOR_BASE_DOMAINS = [
         "966v26.com",                            // 后门主域
         "vposy.com",                             // 知名非官方修改补丁作者域名
@@ -138,7 +137,7 @@ function main(config) {
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
     ];
     // 设计说明：以下代理组识别、数据层、规则组装原本各自有一批 return config 提前退出点，
-    // 会绕过下方"4. Hosts DNS 覆写"的执行——而 Hosts 覆写在逻辑上并不依赖代理组是否找到。
+    // 会绕过下方"Hosts DNS 覆写"节的执行——而 Hosts 覆写在逻辑上并不依赖代理组是否找到。
     // 现在统一改为 throw，由本 try 块外层的 catch 接住并继续执行 Hosts，与规则组装本身
     // "失败也要继续跑 Hosts" 的既有设计意图保持一致。
     try {
@@ -297,8 +296,6 @@ function main(config) {
         }
     }
     // 结构字符校验：proxyGroupName 若含 ,[]{} 会破坏 "TYPE,domain,ACTION" 规则字符串结构
-    // （原正则里还拼了 _CONTROL_CHARS，但那部分是死代码：上面的 entry.g.name !== entry.clean 已经
-    // 保证 proxyGroupName 不含 _CONTROL_CHARS 里的任何字符，走到这里不可能再触发，故删除以免误导）
     if (/[,\[\]{}]/u.test(proxyGroupName)) {
         console.error(`❌ 代理组名含非法字符`); throw new Error("proxy-group-setup-aborted: 代理组名含非法字符");
     }
@@ -372,10 +369,7 @@ function main(config) {
     const udpBlock = [
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.io)),REJECT",
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.com)),REJECT",
-        // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobelogin.com)),REJECT", // 【覆盖范围说明，非"已解决"】此规则本可覆盖 adobelogin.com 裸域+全部子域；
-        // 目前被禁用的理由是 adobeSharedDeps 里的 "ims-na1.adobelogin.com" 已经用 pushSuffix（无协议限定）覆盖了这一个具体子域的 UDP 流量。
-        // 但如果 Adobe 还有其他 *.adobelogin.com 子域走 UDP（未抓包确认），这条规则被禁用意味着那些子域的 UDP 目前不受本层拦截。
-        // 是否要启用本行、把覆盖范围扩大到整个 adobelogin.com，取决于是否有抓包证据，这里不替你做决定。
+        // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobelogin.com)),REJECT", // ⚠️ Firefly 禁用时已由 adobeSharedDeps 里的 "ims-na1.adobelogin.com" 用 pushSuffix（无协议限定）子域规则覆盖，Firefly 启用时 UDP 由 allow 层路由至代理组
         // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobestats.io)),REJECT", // SUFFIX 规则的 adobestats.io（无协议条件）已覆盖所有协议，此处冗余
         // `AND,((NETWORK,UDP),(DOMAIN-REGEX,${_ADOBE_RAND_RE})),REJECT`, // 已被同层 adobe.io 的 UDP SUFFIX 规则覆盖，此处冗余
     ];
@@ -942,8 +936,8 @@ function main(config) {
                     // 实际负责清理 fake-ip-filter 的逻辑（下面的 scriptManaged.has(s)）就是精确字符串匹配，
                     // 二者标准必须一致，否则会出现"语义上已被覆盖，但精确匹配清理不掉"的条目被误判为可删除。
                     // 典型例子：BACKDOOR_BASE_DOMAINS 里的 "966v26.com" 只会自动生成 "+.966v26.com" 等 3 种形式，
-                    // 并不包含 "api.966v26.com" 这个具体字符串——若把它当作"已被覆盖"从 LEGACY_CLEANUP_ENTRIES
-                    // 删掉，以后残留在用户 fake-ip-filter 里的这个具体字符串就再也清不掉了。
+                    // 并不包含 "api.966v26.com" 这个具体字符串——若把它当作"已被覆盖"从 LEGACY_CLEANUP_ENTRIES 删掉，
+                    // 以后残留在用户 fake-ip-filter 里的这个具体字符串就再也清不掉了。
                     const redundant = LEGACY_CLEANUP_ENTRIES.filter(e => currentManaged.has(e.toLowerCase()));
                     if (redundant.length) console.warn("⚠️ 历史托管域名中存在与当前自动生成集合完全重复的冗余条目，可安全清理:", redundant);
                 }
@@ -957,9 +951,6 @@ function main(config) {
                     if (existing.has(s)) continue;
                     existing.add(s); cleaned.push(e);
                 }
-                // 注：此前这里有一段 .filter(d => !existing.has(d.toLowerCase())) —— 经验证是死代码：
-                // existing 只保留"未被 scriptManaged 命中"的条目，而 hijackDomains 里的每一项都必然在
-                // scriptManaged 中（经由 currentManaged），二者结构上不可能有交集，filter 恒真，故直接删除。
                 const newEntries = [...hijackDomains].sort();
                 config.dns["fake-ip-filter"] = [...cleaned, ...newEntries];
 
