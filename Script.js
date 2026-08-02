@@ -136,9 +136,8 @@ function main(config) {
         "api.pzz.cn",                            // 国内后门回传接口
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
     ];
-    // 设计说明：以下代理组识别、数据层、规则组装原本各自有一批 return config 提前退出点，
-    // 会绕过下方"Hosts DNS 覆写"节的执行——而 Hosts 覆写在逻辑上并不依赖代理组是否找到。
-    // 现在统一改为 throw，由本 try 块外层的 catch 接住并继续执行 Hosts，与规则组装本身"注入失败时仍需执行 Hosts 覆写" 的既有设计意图保持一致。
+    // 设计说明：Hosts DNS 覆写在逻辑上独立于代理组识别与规则组装。即使代理组注入失败（如无可用节点），Hosts 覆写仍须强制执行。
+    // 因此此处主动抛出异常，交由外层 catch 统一捕获，确保 Hosts 覆写步骤不被跳过。
     try {
     const EXCLUDED_NAMES = new Set(["DIRECT","REJECT","REJECT-DROP","COMPATIBLE","DEFAULT","MATCH","PASS"]);
     const FALLBACK_NAMES = new Set(["GLOBAL"]);
