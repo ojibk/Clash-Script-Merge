@@ -26,7 +26,7 @@ dns:
   # ── Fake-IP 范围 ──
   fake-ip-range: 198.18.0.0/16           # RFC 2544 基准测试保留地址段，/16 子网容量充足
 
-  # ── Fake-IP 白名单（强制走真实 IP 解析） ──
+  # ── Fake-IP 排除名单（跳过 Fake-IP 映射，使用真实 DNS 解析结果） ──
   fake-ip-filter:
     # NTP 时间同步
     - "time.*.com"
