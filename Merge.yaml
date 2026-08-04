@@ -4,7 +4,7 @@
 # 规则集驱动，可独立运行（依赖网络拉取 rule-providers）。流程：订阅 → Merge → Script → CVR → Mihomo
 # ⚠️ 严禁声明 mode 字段（CVR 独占，冲突崩溃）
 # ============================================================
-# ⚠️ TUN 依赖：sniffer.parse-pure-ip 要求 TUN 接管三层流量。
+# ⚠️ TUN 依赖：sniffer.parse-pure-ip 依赖 TUN 模式接管第三层（IP 层）流量。
 #    必须由 CVR 或主配置注入 tun，否则 parse-pure-ip: true 静默无效。若未由上层注入，可取消注释下方 tun 配置块手动启用。
 #    tun:
 #      enable: true
@@ -330,7 +330,7 @@ rules:
   # ── 归属地映射（弥补长尾盲区，存在 CDN/Anycast 误判风险） ──
   - GEOIP,PRIVATE,DIRECT,no-resolve     # 🔓 私有/保留 IP 直连（确定性集合），no-resolve 禁止为域名主动解析 IP，目标为域名时本规则直接跳过。
   - GEOIP,CN,DIRECT,no-resolve          # 🔓 国内 IP 直连（统计性集合），⚠️ no-resolve 会导致未知域名直接穿透此规则：
-                                        # 兜底为 MATCH,DIRECT 架构下属于性能优化（快速命中纯 IP 请求，并避免无意义 DNS 查询）；
+                                        # 兜底为“MATCH,DIRECT”架构下属于性能优化（快速命中纯 IP 请求，并避免无意义 DNS 查询）；
                                         # ⚠️ 若兜底为 MATCH,代理（Unknown → Proxy），应移除 no-resolve，否则未被 GEOSITE 收录的国内域名将跳过 GEOIP 检查并落入代理。
 
   # ── 无条件兜底 ──
