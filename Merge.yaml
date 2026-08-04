@@ -45,8 +45,8 @@ dns:
     - "+.stun.*.*.*"
     - "+.l.google.com"     # 覆盖 l.google.com 及其子域，同时补齐 stun1./stun2. 等命名变体（stun.*.* 系列模式仅匹配字面 "stun." 前缀，无法覆盖 "stun1." 这类变体）
     # 系统连通性探测
-    - "*.msftconnecttest.com"
-    - "*.msftncsi.com"
+    - "+.msftconnecttest.com"
+    - "+.msftncsi.com"
     - "+.captive.apple.com"
     - "network-test.debian.org"
     - "detectportal.firefox.com"
