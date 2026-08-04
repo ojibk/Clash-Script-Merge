@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260803
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260804
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -131,9 +131,9 @@ function main(config) {
     let proxyGroupName = null;
     // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为后面的 Hosts DNS 覆写节需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
     const BACKDOOR_BASE_DOMAINS = [
-        "966v26.com",                            // 后门主域
-        "vposy.com",                             // 知名非官方修改补丁作者域名
-        "api.pzz.cn",                            // 国内后门回传接口
+        "966v26.com",                            // 后门根域（通配符覆盖其下全部子域，如曾出现过的 api./status. 等）
+        "vposy.com",                             // 非官方修改补丁作者关联域名
+        "api.pzz.cn",                            // 国内后门回传接口（主动上报数据的 API 端点）
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
     ];
     // 设计说明：Hosts DNS 覆写在逻辑上独立于代理组识别与规则组装。即使代理组注入失败（如无可用节点），Hosts 覆写仍须强制执行。
