@@ -443,7 +443,7 @@ function main(config) {
 
     // ── 非官方修改补丁后门 ──
     const backdoorSuffix = [...BACKDOOR_BASE_DOMAINS];
-    const backdoorKeyword = ["966v26"];
+    const backdoorKeyword = ["966v26"];          // 后门根域。当前已知合法域名中未发现同名子串，误命中概率极低。
 
     // ── IDM / Wondershare 等激活拦截 ──
     const idmSuffix = [
@@ -768,7 +768,7 @@ function main(config) {
         "DOMAIN-SUFFIX,apphot.cc,DIRECT",                  // App热（原心海e站）
         "DOMAIN-SUFFIX,25xianbao.com,DIRECT",              // 卡圈线报
         "DOMAIN-SUFFIX,dir28.com,DIRECT",                  // 羊毛活动
-        // "DOMAIN-KEYWORD,amazon,DIRECT",                 // 亚马逊直连（⚠️ 覆盖 AWS，需代理时改用精确规则）
+        // "DOMAIN-KEYWORD,amazon,DIRECT",                 // 亚马逊直连（⚠️ 会覆盖 AWS，若需代理改用精确规则）
         // "DOMAIN-SUFFIX,tmall.hk,DIRECT",                // 淘宝 .hk 域，如被代理可能影响商品价格加载
     ];
 
