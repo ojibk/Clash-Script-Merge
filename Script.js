@@ -768,7 +768,7 @@ function main(config) {
         "DOMAIN-SUFFIX,apphot.cc,DIRECT",                  // App热（原心海e站）
         "DOMAIN-SUFFIX,25xianbao.com,DIRECT",              // 卡圈线报
         "DOMAIN-SUFFIX,dir28.com,DIRECT",                  // 羊毛活动
-        // "DOMAIN-KEYWORD,amazon,DIRECT",                 // 亚马逊直连（⚠️ 会覆盖 AWS，若需代理改用精确规则）
+        // "DOMAIN-KEYWORD,amazon,DIRECT",                 // 亚马逊直连（⚠️ 会覆盖 AWS，若需代理可改用精确规则）
         // "DOMAIN-SUFFIX,tmall.hk,DIRECT",                // 淘宝 .hk 域，如被代理可能影响商品价格加载
     ];
 
