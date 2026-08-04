@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260804
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260805
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -676,7 +676,7 @@ function main(config) {
     ];
 
     // ── 全局关键词兜底（默认关闭）──
-    const globalKeyword = ["telemetry", "analytics", "stats", "metrics"];
+    const globalKeyword = ["telemetry", "analytics", "stats", "metrics"]; // ⚠️ 慎用：存在误匹配风险，仅建议临时排查，不建议长期启用
 
     // ── 进程规则（需 TUN + 管理员权限）──
     // 注：规则中 REJECT-DROP（静默丢弃）用于让目标进程“感知不到”网络，REJECT（发送 TCP RST）用于让进程快速失败；选择依据是进程对网络超时的敏感度。

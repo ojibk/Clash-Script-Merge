@@ -1,10 +1,10 @@
 # ============================================================
-# Clash-Merge 全局扩展覆写配置 v260804
-# 自适应路由受限网络服务
+# Clash-Merge 全局扩展覆写配置 v260805
+# 自适应路由受限的网络服务
 # 规则集驱动，可独立运行（依赖网络拉取 rule-providers）。流程：订阅 → Merge → Script → CVR → Mihomo
 # ⚠️ 严禁声明 mode 字段（CVR 独占，冲突崩溃）
 # ============================================================
-# ⚠️ TUN 依赖：sniffer.parse-pure-ip 依赖 TUN 模式接管第三层（IP 层）流量。
+# ⚠️ TUN 依赖：sniffer.parse-pure-ip 依赖 TUN 模式接管第三层（IP 层）网络流量。
 #    必须由 CVR 或主配置注入 tun，否则 parse-pure-ip: true 静默无效。若未由上层注入，可取消注释下方 tun 配置块手动启用。
 #    tun:
 #      enable: true
@@ -24,7 +24,7 @@ dns:
   ipv6: false                            # 关闭 IPv6，避免纯 IPv4 代理环境下连接错误，若全链路支持 IPv6 且代理可出站，可改为 true
 
   # ── Fake-IP 范围 ──
-  fake-ip-range: 198.18.0.0/16           # RFC 2544 预留段，/16 子网容量充足
+  fake-ip-range: 198.18.0.0/16           # RFC 2544 基准测试保留地址段，/16 子网容量充足
 
   # ── Fake-IP 白名单（强制走真实 IP 解析） ──
   fake-ip-filter:
@@ -43,7 +43,7 @@ dns:
     - "stun.*.*.*"
     - "+.stun.*.*"
     - "+.stun.*.*.*"
-    - "+.l.google.com"     # 覆盖 l.google.com 全子域，同时补齐 stun1./stun2. 等数字后缀命名变体（stun.*.* 系列模式仅匹配字面 "stun." 前缀，无法覆盖 "stun1." 这类变体）
+    - "+.l.google.com"     # 覆盖 l.google.com 及其子域，同时补齐 stun1./stun2. 等命名变体（stun.*.* 系列模式仅匹配字面 "stun." 前缀，无法覆盖 "stun1." 这类变体）
     # 系统连通性探测
     - "*.msftconnecttest.com"
     - "*.msftncsi.com"
@@ -162,7 +162,7 @@ sniffer:
     QUIC:
       ports: [443, 8443, 2053, 2083, 2087, 2096]        # QUIC (HTTP/3) 端口
   # override-destination: 默认不启用，启用可能导致绑定 IP 的服务异常
-  # skip-domain: 未配置，若 IoT 设备域名被误判为其他类别可在此配置排除
+  # skip-domain: 未配置；若 IoT 设备域名被误判为其他流量，可在此列出以排除
 
 # ============================================================
 # ░░ 策略组 (Proxy Groups) — 锚点组，rules 出口保障
