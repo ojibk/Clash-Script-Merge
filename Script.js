@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260805
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260806
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -161,7 +161,7 @@ function main(config) {
     }
 
     // ═══════════════ 基础控制字符集（清洗和校验共用） ═══════════════
-    const _CONTROL_CHARS = "\u0000-\u001F\u007F\u0085\u00AD\u061C\u2000-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF"; // \u2000-\u200A 为 EN QUAD 等 Unicode 通用标点空格变体，出现在名称中间时不受 .trim() 影响
+    const _CONTROL_CHARS = "\u0000-\u001F\u007F\u0085\u00AD\u061C\u2000-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF"; // \u2000-\u200A 为空白字符（如 EN QUAD），出现在名称中间时不受 .trim() 影响
 
     const _SANITIZE_RE = new RegExp(`[${_CONTROL_CHARS}]`, "gu");
     const sanitizeName = n => (typeof n === "string" && n) ? n.replace(_SANITIZE_RE, '').trim() : "";
@@ -250,7 +250,8 @@ function main(config) {
                 _KW_RE.test(e.clean) && hasNodes(e));
             entry = _tier2Candidates.find(e => e.g?.type === "select") || _tier2Candidates[0];
             if (_tier2Candidates.length > 1) {
-                console.warn(`⚠️ tier2 命中 ${_tier2Candidates.length} 个候选组，已选 [${entry?.g?.name}] (type: ${entry?.g?.type})，其余候选: ${_tier2Candidates.filter(e => e !== entry).map(e => `[${e.g.name}](${e.g.type})`).join("、")}`);
+                console.warn(`⚠️ tier2 命中 ${_tier2Candidates.length} 个候选组，已选 [${entry?.g?.name}] (type: ${entry?.g?.type})，`
+                    + `其余候选: ${_tier2Candidates.filter(e => e !== entry).map(e => `[${e.g.name}](${e.g.type})`).join("、")}`);
             }
         }
         // tier3: 仅当 tier2 全表落空时，才接受纯 include-all（此时数组顺序才会成为决定因素）
