@@ -721,7 +721,7 @@ function main(config) {
         "services.googleapis.cn",                 // 修复国行设备因使用 services.googleapis.cn 域名导致的 Google Play 下载应用时的「等待中…」问题
         "store.steampowered.com",                 // Steam 商店
         "steamcommunity.com",                     // Steam 社区
-        // "api.steampowered.com",                   // Steam API，视网络情况决定是否代理
+        "api.steampowered.com",                   // Steam API，视网络情况决定是否代理
         // "openai.com",                             // OpenAI，有地区限制需绕开
         // "gemini.google.com",                      // Gemini（⚠️ 与 google.com 须同策略组，IP 不同可能触发风控）
     ];
