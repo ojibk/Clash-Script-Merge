@@ -719,11 +719,11 @@ function main(config) {
         "behance.adobe.com",                      // Behance Adobe 子域
         "copilot.microsoft.com",                  // Copilot AI
         "services.googleapis.cn",                 // 修复国行设备因使用 services.googleapis.cn 域名导致的 Google Play 下载应用时的「等待中…」问题
-        // "openai.com",                             // OpenAI，按需取消注释
-        // "gemini.google.com",                      // Gemini（⚠️ 与 google.com 须同策略组，IP 不同可能触发风控）
-        // "store.steampowered.com",                 // Steam 商店
-        // "steamcommunity.com",                     // Steam 社区
+        "store.steampowered.com",                 // Steam 商店
+        "steamcommunity.com",                     // Steam 社区
         // "steamstatic.com",                        // Steam 商店静态资源
+        // "openai.com",                             // OpenAI，有地区限制需绕开
+        // "gemini.google.com",                      // Gemini（⚠️ 与 google.com 须同策略组，IP 不同可能触发风控）
     ];
 
     // ── 直连规则 ──
@@ -753,9 +753,9 @@ function main(config) {
         // 基础设施
         "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",       // NTP 时间同步（仅 TUN 模式有效）
         // 游戏平台
-        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 根域直连（含下载 CDN 子域，满速）
-        "DOMAIN-SUFFIX,steamcontent.com,DIRECT",           // Steam 游戏内容分发 CDN（满速下载）
+        "DOMAIN-SUFFIX,steamcontent.com,DIRECT",           // Steam 游戏内容分发 CDN（高带宽资源直连）
         "DOMAIN-SUFFIX,steamserver.net,DIRECT",            // Steam 联机对战后端
+        "DOMAIN-SUFFIX,steamstatic.com,DIRECT",            // Steam 商店静态资源
         // 工具与下载站
         "DOMAIN-SUFFIX,pixpinapp.com,DIRECT",              // 截图贴图工具
         "DOMAIN-SUFFIX,pixpin.cn,DIRECT",                  // 截图贴图工具
