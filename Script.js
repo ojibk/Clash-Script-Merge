@@ -368,7 +368,7 @@ function main(config) {
     const udpBlock = [
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.io)),REJECT",
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.com)),REJECT",
-        // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobelogin.com)),REJECT", // ⚠️ Firefly 禁用时已由 adobeSharedDeps 里的 "ims-na1.adobelogin.com" 用 pushSuffix（无协议限定）子域规则覆盖，Firefly 启用时 UDP 由 allow 层路由至代理组
+        // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobelogin.com)),REJECT", // ⚠️ Firefly 禁用时由 adobeSharedDeps 里的 "ims-na1.adobelogin.com" 用 pushSuffix（无协议限定）子域规则覆盖，Firefly 启用时 UDP 由 allow 层路由至代理组
         // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobestats.io)),REJECT", // SUFFIX 规则的 adobestats.io（无协议条件）已覆盖所有协议，此处冗余
         // `AND,((NETWORK,UDP),(DOMAIN-REGEX,${_ADOBE_RAND_RE})),REJECT`, // 已被同层 adobe.io 的 UDP SUFFIX 规则覆盖，此处冗余
     ];
@@ -437,14 +437,14 @@ function main(config) {
         "ipm-aem.autodesk.com",                  // 弹窗消息（精确匹配）
     ];
     const autodeskKeyword = [
-        // "adlm",                                  // 桌面许可证模块关键词。⚠️ 4字符短串，存在极低概率误伤不相关含 adlm 子串的域名
+        // "adlm",                                  // 桌面许可证模块关键词。⚠️ 4字符短串，存在低概率误伤不相关含 adlm 子串的域名
         "telemetry.autodesk",                    // 遥测模块关键词兜底
         "entitlement.autodesk",                  // 授权模块关键词兜底
     ];
 
     // ── 非官方修改补丁后门 ──
     const backdoorSuffix = [...BACKDOOR_BASE_DOMAINS];
-    const backdoorKeyword = ["966v26"];          // 后门根域。当前已知合法域名中未发现同名子串，误命中概率极低。
+    const backdoorKeyword = ["966v26"];          // 后门特征关键词。当前维护范围内未发现合法域名包含该字符串，误匹配概率极低。
 
     // ── IDM / Wondershare 等激活拦截 ──
     const idmSuffix = [
