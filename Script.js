@@ -131,7 +131,7 @@ function main(config) {
     let proxyGroupName = null;
     // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为后面的 Hosts DNS 覆写节需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
     const BACKDOOR_BASE_DOMAINS = [
-        "966v26.com",                            // 后门根域（通配符覆盖其下全部子域，如曾出现过的 api./status. 等）
+        "966v26.com",                            // 后门裸域（通配符覆盖其下全部子域，如曾出现过的 api./status. 等）
         "vposy.com",                             // 非官方修改补丁作者关联域名
         "api.pzz.cn",                            // 国内后门回传接口（主动上报数据的 API 端点）
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
@@ -721,7 +721,7 @@ function main(config) {
         "services.googleapis.cn",                 // 修复国行设备因使用 services.googleapis.cn 域名导致的 Google Play 下载应用时的「等待中…」问题
         "store.steampowered.com",                 // Steam 商店
         "steamcommunity.com",                     // Steam 社区
-        // "steamstatic.com",                        // Steam 商店静态资源
+        "api.steampowered.com",                   // Steam API，视网络情况决定是否代理
         // "openai.com",                             // OpenAI，有地区限制需绕开
         // "gemini.google.com",                      // Gemini（⚠️ 与 google.com 须同策略组，IP 不同可能触发风控）
     ];
@@ -753,6 +753,7 @@ function main(config) {
         // 基础设施
         "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",       // NTP 时间同步（仅 TUN 模式有效）
         // 游戏平台
+        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 裸域直连（含下载 CDN 子域）
         "DOMAIN-SUFFIX,steamcontent.com,DIRECT",           // Steam 游戏内容分发 CDN（高带宽资源直连）
         "DOMAIN-SUFFIX,steamserver.net,DIRECT",            // Steam 联机对战后端
         "DOMAIN-SUFFIX,steamstatic.com,DIRECT",            // Steam 商店静态资源
