@@ -728,6 +728,7 @@ function main(config) {
 
     // ── 直连规则 ──
     const directRules = [
+        // 厂商官网与常用服务
         "DOMAIN-SUFFIX,microsoft.com,DIRECT",              // 微软主域
         "DOMAIN-SUFFIX,live.com,DIRECT",                   // 微软账户 / Hotmail
         "DOMAIN-SUFFIX,outlook.com,DIRECT",                // Outlook 邮件服务
@@ -744,16 +745,18 @@ function main(config) {
         "DOMAIN-SUFFIX,msedge.net,DIRECT",                 // Microsoft Edge CDN/更新
         "DOMAIN-SUFFIX,msftconnecttest.com,DIRECT",        // NCSI 连通性探测（拦截后显示「无网络」）
         "DOMAIN-SUFFIX,msftncsi.com,DIRECT",               // NCSI 旧版探测域
-        // Adobe 常用业务放行
         "DOMAIN-SUFFIX,fonts.adobe.com,DIRECT",            // Adobe Fonts 字体同步服务
         "DOMAIN-SUFFIX,color.adobe.com,DIRECT",            // Adobe Color 配色工具
         "DOMAIN,assets.adobe.com,DIRECT",                  // Adobe 静态资源 CDN（精确匹配以防无关子域被直连）
         "DOMAIN-SUFFIX,autodesk.com,DIRECT",               // Autodesk 官网放行（下载/论坛）
         "DOMAIN-SUFFIX,corel.com,DIRECT",                  // Corel 官网放行
+        // 基础设施
         "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",       // NTP 时间同步（仅 TUN 模式有效）
+        // 游戏平台
         "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 根域直连（含下载 CDN 子域，满速）
         "DOMAIN-SUFFIX,steamcontent.com,DIRECT",           // Steam 游戏内容分发 CDN（满速下载）
         "DOMAIN-SUFFIX,steamserver.net,DIRECT",            // Steam 联机对战后端
+        // 工具与下载站
         "DOMAIN-SUFFIX,pixpinapp.com,DIRECT",              // 截图贴图工具
         "DOMAIN-SUFFIX,pixpin.cn,DIRECT",                  // 截图贴图工具
         "DOMAIN-SUFFIX,lanzou.com,DIRECT",                 // 蓝奏云主域
