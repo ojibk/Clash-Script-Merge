@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260806
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260807
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -721,7 +721,12 @@ function main(config) {
         "services.googleapis.cn",                 // 修复国行设备因使用 services.googleapis.cn 域名导致的 Google Play 下载应用时的「等待中…」问题
         "store.steampowered.com",                 // Steam 商店
         "steamcommunity.com",                     // Steam 社区
+        "login.steampowered.com",                 // Steam 登录鉴权 (极易被阻断，需代理)
+        "help.steampowered.com",                  // Steam 客服/退款 (易被阻断)
+        "steamusercontent.com",                   // 创意工坊/用户截图/头像 (已被重度污染)
+        "steam-chat.com",                         // Steam 好友聊天框架
         "api.steampowered.com",                   // Steam API，视网络情况决定是否代理
+        // "steamstatic.com",                        // (可选) 如果商店页面经常加载不出图片和CSS排版，请取消注释放入代理
         // "openai.com",                             // OpenAI，有地区限制需绕开
         // "gemini.google.com",                      // Gemini（⚠️ 与 google.com 须同策略组，IP 不同可能触发风控）
     ];
