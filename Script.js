@@ -758,7 +758,7 @@ function main(config) {
         // 基础设施
         "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",       // NTP 时间同步（仅 TUN 模式有效）
         // 游戏平台
-        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam steampowered.com 域系直连（含下载 CDN 子域）
+        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 主域系直连（含下载 CDN 子域；部分业务子域已被前置规则代理）
         "DOMAIN-SUFFIX,steamcontent.com,DIRECT",           // Steam 游戏内容分发 CDN（高带宽资源直连）
         "DOMAIN-SUFFIX,steamserver.net,DIRECT",            // Steam 联机对战后端
         "DOMAIN-SUFFIX,steamstatic.com,DIRECT",            // Steam 商店静态资源
