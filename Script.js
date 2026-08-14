@@ -182,8 +182,8 @@ function main(config) {
         const isRealProxyEntry = p => typeof p === "string" && !_NON_PROXY_TARGETS.has(p.trim().toUpperCase());
         const hasRealProxies = g => Array.isArray(g?.proxies) && g.proxies.some(isRealProxyEntry);
 
-        // 节点来源单一数据源（hasNodes 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
-        // ⚠️ 设计取舍说明：hasNodes 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
+        // 节点来源单一数据源（hasNodeSource 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
+        // ⚠️ 设计取舍说明：hasNodeSource 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
         //   若组A仅有1个静态节点，组B有50个 provider 节点，some() 对两者均返回 true；在 tier2/tier4 的 find() 中，匹配的第一个检测到节点来源组即被选中，而非“节点最多”的组。
         // 原因：1. 静态节点通常是用户精选的高质量节点，“少而精”可能优于“多而杂”；2. 避免为统计节点总数引入额外遍历开销。
         const NODE_SOURCE_CHECKS = [
@@ -218,10 +218,10 @@ function main(config) {
             }
         }
 
-        const hasNodes = e => NODE_SOURCE_CHECKS.some(c => c.test(e.g));
+        const hasNodeSource = e => NODE_SOURCE_CHECKS.some(c => c.test(e.g));
         const _nodeDesc = g => {
             const hit = NODE_SOURCE_CHECKS.find(c => c.test(g));
-            return hit ? hit.desc(g) : "0 节点";
+            return hit ? hit.desc(g) : "未检测到节点来源";
         };
 
         // tier（层级）多级降级识别：tier1 优先采用手动精确指定，tier2 匹配名称含关键词的合格策略组，tier3 纯 include-all，tier4 放宽名称限制，tier5 降级使用兜底组，tier6 最终容错
@@ -234,7 +234,7 @@ function main(config) {
             } else if (!_hit.eligible) {
                 // 提前用 eligible 拦一道，避免"这里预选成功、下面排除断言又将其剔除"这种前后矛盾的日志
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 命中排除名单（DIRECT/REJECT 等保留名或"全局/所有"类兜底名），回退到自动识别`);
-            } else if (!VALID_PROXY_TYPES.has(_hit.g?.type) || !hasNodes(_hit)) {
+            } else if (!VALID_PROXY_TYPES.has(_hit.g?.type) || !hasNodeSource(_hit)) {
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 存在，但类型不受支持或未检测到节点来源（type: ${_hit.g?.type}, ${_nodeDesc(_hit.g)}），回退到自动识别`);
             } else {
                 entry = _hit;
@@ -247,7 +247,7 @@ function main(config) {
         // 无 select 候选、或多个候选类型相同时，胜出者依旧由数组声明顺序决定。
         if (!entry) {
             const _tier2Candidates = prepped.filter(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) &&
-                _KW_RE.test(e.clean) && hasNodes(e));
+                _KW_RE.test(e.clean) && hasNodeSource(e));
             entry = _tier2Candidates.find(e => e.g?.type === "select") || _tier2Candidates[0];
             if (_tier2Candidates.length > 1) {
                 console.warn(`⚠️ tier2 命中 ${_tier2Candidates.length} 个候选组，已选 [${entry?.g?.name}] (type: ${entry?.g?.type})，`
@@ -256,17 +256,17 @@ function main(config) {
         }
         // tier3: 仅当 tier2 全表落空时，才接受纯 include-all（此时数组顺序才会成为决定因素）
         if (!entry) entry = prepped.find(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) &&
-            (e.g?.["include-all"] === true || e.g?.["include-all"] === "true") && hasNodes(e));
+            (e.g?.["include-all"] === true || e.g?.["include-all"] === "true") && hasNodeSource(e));
         // tier4: 放宽名称限制
-        if (!entry) entry = prepped.find(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) && hasNodes(e));
+        if (!entry) entry = prepped.find(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) && hasNodeSource(e));
         // tier5: 降级使用兜底组
         if (!entry) {
-            entry = prepped.find(e => e.fallback && VALID_PROXY_TYPES.has(e.g?.type) && hasNodes(e));
+            entry = prepped.find(e => e.fallback && VALID_PROXY_TYPES.has(e.g?.type) && hasNodeSource(e));
             if (entry) console.warn(`⚠️ 降级使用兜底组 [${entry.g.name}]`);
         }
         // tier6: 最终容错
         if (!entry) {
-            entry = prepped.find(e => e.eligible && e.g?.type != null && !NONROUTABLE_TYPES.has(e.g?.type) && hasNodes(e));
+            entry = prepped.find(e => e.eligible && e.g?.type != null && !NONROUTABLE_TYPES.has(e.g?.type) && hasNodeSource(e));
             if (entry) console.warn(`🚨 最终容错选取 [${entry.g.name}]`);
         }
 
@@ -758,7 +758,7 @@ function main(config) {
         // 基础设施
         "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",       // NTP 时间同步（仅 TUN 模式有效）
         // 游戏平台
-        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 域系直连（含下载 CDN 子域）
+        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam steampowered.com 域系直连（含下载 CDN 子域）
         "DOMAIN-SUFFIX,steamcontent.com,DIRECT",           // Steam 游戏内容分发 CDN（高带宽资源直连）
         "DOMAIN-SUFFIX,steamserver.net,DIRECT",            // Steam 联机对战后端
         "DOMAIN-SUFFIX,steamstatic.com,DIRECT",            // Steam 商店静态资源
