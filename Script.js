@@ -8,7 +8,7 @@ function main(config) {
     const _startTime = Date.now();
 
     // ═══════════════ 配置区（按需调整） ═══════════════
-    const ENABLE_SCRIPT                = true;            // 脚本总开关
+    const ENABLE_SCRIPT                = true;            // 脚本功能注入总开关（关闭时仍执行遗留标记清理）
     const ENABLE_BLOCK                 = true;            // 拦截模块
     const ENABLE_FIREFLY               = true;            // Firefly 放行（需 ENABLE_BLOCK=true）
     const ENABLE_PROCESS_RULE          = true;            // 进程规则（需 TUN + 管理员权限）
@@ -131,7 +131,7 @@ function main(config) {
     let proxyGroupName = null;
     // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为后面的 Hosts DNS 覆写节需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
     const BACKDOOR_BASE_DOMAINS = [
-        "966v26.com",                            // 后门裸域（通配符覆盖其下全部子域，如曾出现过的 api./status. 等）
+        "966v26.com",                            // 后门裸域（覆盖其及其全部子域，如曾出现过的 api./status. 等）
         "vposy.com",                             // 非官方修改补丁作者关联域名
         "api.pzz.cn",                            // 国内后门回传接口（主动上报数据的 API 端点）
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
@@ -184,7 +184,7 @@ function main(config) {
 
         // 节点来源单一数据源（hasNodes 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
         // ⚠️ 设计取舍说明：hasNodes 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
-        //   若组A仅有1个静态节点，组B有50个 provider 节点，some() 对两者均返回 true；在 tier2/tier4 的 find() 中，匹配的第一个有节点组即被选中，而非“节点最多”的组。
+        //   若组A仅有1个静态节点，组B有50个 provider 节点，some() 对两者均返回 true；在 tier2/tier4 的 find() 中，匹配的第一个检测到节点来源组即被选中，而非“节点最多”的组。
         // 原因：1. 静态节点通常是用户精选的高质量节点，“少而精”可能优于“多而杂”；2. 避免为统计节点总数引入额外遍历开销。
         const NODE_SOURCE_CHECKS = [
             {
@@ -235,7 +235,7 @@ function main(config) {
                 // 提前用 eligible 拦一道，避免"这里预选成功、下面排除断言又将其剔除"这种前后矛盾的日志
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 命中排除名单（DIRECT/REJECT 等保留名或"全局/所有"类兜底名），回退到自动识别`);
             } else if (!VALID_PROXY_TYPES.has(_hit.g?.type) || !hasNodes(_hit)) {
-                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 存在但类型不受支持或没有可用节点（type: ${_hit.g?.type}, ${_nodeDesc(_hit.g)}），回退到自动识别`);
+                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 存在，但类型不受支持或未检测到节点来源（type: ${_hit.g?.type}, ${_nodeDesc(_hit.g)}），回退到自动识别`);
             } else {
                 entry = _hit;
                 console.log(`✅ 代理组（手动指定 PRIMARY_GROUP_NAME）: [${entry.g.name}]`);
@@ -316,8 +316,8 @@ function main(config) {
 
     // ── Adobe 共用鉴权端点（包括 Firefly 和 CC） ──
     // 受控于 fireflyUseProxy = ENABLE_FIREFLY && ENABLE_BLOCK 两个开关，Firefly 启用时路由至代理组，Firefly 禁用时以 REJECT 拦截。
-    // 此处走 pushSuffix(无协议限定)，故 UDP 与 TCP 遵循相同的目标动作(Firefly 启用时二者皆走代理组，
-    // 禁用时二者皆被 REJECT)，不像 adobeFireflyOnly 那样单独对 UDP 做 udpBlock 强制拦截。
+    // 此处走 pushSuffix(无协议限定)，故 UDP 与 TCP 遵循相同的目标动作(Firefly 启用时二者皆走代理组，禁用时二者皆被 REJECT)，
+    // UDP 最终是否经该代理组转发，还取决于所选出口是否支持 UDP。不像 adobeFireflyOnly 那样单独对 UDP 做 udpBlock 强制拦截。
     const adobeSharedDeps = [
         "ims-na1.adobelogin.com",                 // 登录令牌刷新
         "adobeid-na1.services.adobe.com",         // Adobe ID 服务
@@ -680,7 +680,7 @@ function main(config) {
     const globalKeyword = ["telemetry", "analytics", "stats", "metrics"]; // ⚠️ 慎用：存在误匹配风险，仅建议临时排查，不建议长期启用
 
     // ── 进程规则（需 TUN + 管理员权限）──
-    // 注：规则中 REJECT-DROP（静默丢弃）用于让目标进程“感知不到”网络，REJECT（发送 TCP RST）用于让进程快速失败；选择依据是进程对网络超时的敏感度。
+    // 注：规则中 REJECT-DROP（静默丢弃）用于让目标进程“感知不到”网络，REJECT（立即拒绝连接）TCP 场景通常表现为快速失败，具体行为随传输协议而异；选择依据是进程对网络超时的敏感度。
     const processBlockRules = [
         // "AND,((NETWORK,UDP),(DST-PORT,443),(PROCESS-NAME,AdobeGCClient.exe)),REJECT-DROP", // 仅 UDP 443
         // "AND,((NETWORK,UDP),(PROCESS-NAME,AdobeGCClient.exe)),REJECT-DROP", // 全部 UDP
@@ -758,7 +758,7 @@ function main(config) {
         // 基础设施
         "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",       // NTP 时间同步（仅 TUN 模式有效）
         // 游戏平台
-        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 裸域直连（含下载 CDN 子域）
+        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 域系直连（含下载 CDN 子域）
         "DOMAIN-SUFFIX,steamcontent.com,DIRECT",           // Steam 游戏内容分发 CDN（高带宽资源直连）
         "DOMAIN-SUFFIX,steamserver.net,DIRECT",            // Steam 联机对战后端
         "DOMAIN-SUFFIX,steamstatic.com,DIRECT",            // Steam 商店静态资源
