@@ -723,10 +723,10 @@ function main(config) {
         "steamcommunity.com",                     // Steam 社区
         "login.steampowered.com",                 // Steam 登录鉴权 (极易被阻断，需代理)
         "help.steampowered.com",                  // Steam 客服/退款 (易被阻断)
-        "steamusercontent.com",                   // 创意工坊/用户截图/头像 (已被污染)
         "steam-chat.com",                         // Steam 好友聊天框架
         "api.steampowered.com",                   // Steam API，视网络情况决定是否代理
-        // "steamstatic.com",                        // (可选) 如果商店页面经常加载不出图片和CSS排版，可取消注释放入代理
+        // "steamstatic.com",                        // (可选) 如果 Steam 商店页面经常加载不出图片和CSS排版，可取消注释放入代理
+        // "steamusercontent.com",                   // Steam 创意工坊/用户截图/头像
         // "openai.com",                             // OpenAI，有地区限制需绕开
         // "gemini.google.com",                      // Gemini（⚠️ 与 google.com 须同策略组，IP 不同可能触发风控）
     ];
