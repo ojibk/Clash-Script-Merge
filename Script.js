@@ -33,7 +33,7 @@ function main(config) {
     if (!Array.isArray(config["proxy-groups"])) config["proxy-groups"] = [];
 
     if (ENABLE_FIREFLY && !ENABLE_BLOCK) console.warn("⚠️ Firefly 放行需 ENABLE_BLOCK=true");
-    if (ENABLE_FIREFLY && ENABLE_AGGRESSIVE && !ENABLE_BLOCK) console.warn("⚠️ ENABLE_BLOCK=false 时 aggressiveRules 会对 adobe.io 无差别 REJECT-DROP，Firefly 将被直接拦掉，而不只是放行逻辑不生效");
+    if (ENABLE_FIREFLY && ENABLE_AGGRESSIVE && !ENABLE_BLOCK) console.warn("⚠️ ENABLE_BLOCK=false 时 aggressiveRules 会对 adobe.io 无差别 REJECT-DROP，Firefly 将不仅失去白名单特权，更会被直接切断");
     if (ENABLE_PROCESS_RULE && config["find-process-mode"] !== "strict" && config["find-process-mode"] !== "always") {
         console.warn(`⚠️ 进程规则要求 find-process-mode=strict/always，当前 [${config["find-process-mode"] ?? "未设置"}]`);
     }
@@ -83,7 +83,7 @@ function main(config) {
     } else if (!Array.isArray(config.proxies)) {
         console.log("ℹ️ config.proxies 不是数组，跳过指纹注入");
     } else {
-        const _VALID = new Set(["chrome","firefox","safari","iOS","android","edge","360","qq","random","none"]); // none 值理论不可达,保留仅为枚举完整性
+        const _VALID = new Set(["chrome","firefox","safari","iOS","android","edge","360","qq","random","none"]); // "none" 值理论无法被触发,保留仅为枚举完整性
         let _rawFP;
         if (_VALID.has(DEFAULT_FINGERPRINT)) {
             _rawFP = DEFAULT_FINGERPRINT;
@@ -178,7 +178,7 @@ function main(config) {
         // ═══════════════ 非代理目标常量（用于区分真实节点与 DIRECT/REJECT 等非代理目标） ═══════════════
         const _NON_PROXY_TARGETS = new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"]);
         // 仅做单层字面量检测：若 proxies 指向另一个策略组、而该组本身才是纯伪目标终点，此处不会递归展开发现。
-        // 现实中的"伪装组"绝大多数是平铺写法（如 Remnawave 的 "No Proxy" 示例），此为已知、可接受的残余边界。
+        // 现实中的"伪装组"多采用平铺声明（如 Remnawave 的 "No Proxy"），此为架构设计上已知且为兼顾性能而妥协的边界情况。
         const isRealProxyEntry = p => typeof p === "string" && !_NON_PROXY_TARGETS.has(p.trim().toUpperCase());
         const hasRealProxies = g => Array.isArray(g?.proxies) && g.proxies.some(isRealProxyEntry);
 
