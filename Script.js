@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260814
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260815
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -178,7 +178,7 @@ function main(config) {
         // ═══════════════ 非代理目标常量（用于区分真实节点与 DIRECT/REJECT 等非代理目标） ═══════════════
         const _NON_PROXY_TARGETS = new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"]);
         // 仅做单层字面量检测：若 proxies 指向另一个策略组、而该组本身才是纯伪目标终点，此处不会递归展开发现。
-        // 现实中的"伪装组"多采用平铺声明（如 Remnawave 的 "No Proxy"），此为架构设计上已知且为兼顾性能而妥协的边界情况。
+        // 现实中的"伪装组"多采用平铺声明（如 Remnawave 的 "No Proxy"），此为架构设计上已知、可接受的妥协边界情况。
         const isRealProxyEntry = p => typeof p === "string" && !_NON_PROXY_TARGETS.has(p.trim().toUpperCase());
         const hasRealProxies = g => Array.isArray(g?.proxies) && g.proxies.some(isRealProxyEntry);
 
