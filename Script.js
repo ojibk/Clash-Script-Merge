@@ -356,7 +356,7 @@ function main(config) {
         // "practivate.adobe.com",                   // 预激活服务。该域名可能已失效，待验证
     ];
 
-    const _ADOBE_RAND_RE = "^[A-Za-z0-9]{8,12}\\.adobe\\.io$"; // 匹配随机8~12位字母/数字.adobe.io 子域
+    const _ADOBE_RAND_RE = "^[A-Za-z0-9]{8,12}\\.adobe\\.io$"; // 匹配8~12位字母/数字.adobe.io 子域
     // const _ADOBESTATS_RAND_RE = "^[A-Za-z0-9]{10}\\.adobestats\\.io$"; // 匹配随机10位字母/数字子域
     const adobeRegex = [
         `DOMAIN-REGEX,${_ADOBE_RAND_RE},REJECT`,
