@@ -186,7 +186,7 @@ function main(config) {
         // ⚠️ 设计取舍说明：hasNodeSource 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
         //   若组A仅有1个静态节点，组B有50个 provider 节点，some() 对两者均返回 true；在 tier2/tier4 的 find() 中，匹配的第一个检测到节点来源组即被选中，而非“节点最多”的组。
         // 原因：1. 静态节点通常是用户精选的高质量节点，“少而精”可能优于“多而杂”；2. 避免为统计节点总数引入额外遍历开销。
-        const NODE_SOURCE_CHECKS = [
+        const NODE_SOURCE_CHECKS = [ // 不检查实际节点数量、过滤结果、健康状态、provider 加载状态
             {
                 test: g => hasRealProxies(g),
                 desc: g => `${g.proxies.filter(isRealProxyEntry).length} 节点(静态)`,  // 静态节点列表（排除纯 DIRECT/REJECT 伪装组）
@@ -224,7 +224,7 @@ function main(config) {
             return hit ? hit.desc(g) : "未检测到节点来源";
         };
 
-        // tier（层级）多级降级识别：tier1 优先采用手动精确指定，tier2 匹配名称含关键词的合格策略组，tier3 纯 include-all，tier4 放宽名称限制，tier5 降级使用兜底组，tier6 最终容错
+        // tier（层级）多级降级识别：tier1 优先采用手动精确指定，tier2 匹配名称含关键词的合格策略组，tier3 包含 include-all，tier4 放宽名称限制，tier5 降级使用兜底组，tier6 最终容错
         // tier1: 手动精确指定（PRIMARY_GROUP_NAME 非空时）——完全绕开下面的启发式识别，把选择权交还给用户
         let entry = null;
         if (PRIMARY_GROUP_NAME) {
