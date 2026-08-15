@@ -186,7 +186,8 @@ function main(config) {
         // ⚠️ 设计取舍说明：hasNodeSource 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
         //   若组A仅有1个静态节点，组B有50个 provider 节点，some() 对两者均返回 true；在 tier2/tier4 的 find() 中，匹配的第一个检测到节点来源组即被选中，而非“节点最多”的组。
         // 原因：1. 静态节点通常是用户精选的高质量节点，“少而精”可能优于“多而杂”；2. 避免为统计节点总数引入额外遍历开销。
-        const NODE_SOURCE_CHECKS = [ // 不检查实际节点数量、过滤结果、健康状态、provider 加载状态
+        // ⚠️ 节点来源检测只判断配置结构：不检查实际节点数量、过滤结果、健康状态或 provider 加载状态。新增节点来源方式时，在此追加 test/desc。
+        const NODE_SOURCE_CHECKS = [
             {
                 test: g => hasRealProxies(g),
                 desc: g => `${g.proxies.filter(isRealProxyEntry).length} 节点(静态)`,  // 静态节点列表（排除纯 DIRECT/REJECT 伪装组）
@@ -254,7 +255,7 @@ function main(config) {
                     + `其余候选: ${_tier2Candidates.filter(e => e !== entry).map(e => `[${e.g.name}](${e.g.type})`).join("、")}`);
             }
         }
-        // tier3: 仅当 tier2 全表落空时，才接受纯 include-all（此时数组顺序才会成为决定因素）
+        // tier3: 仅当 tier2 全表落空时，才接受包含 include-all 的合格策略组（此时数组顺序才会成为决定因素）
         if (!entry) entry = prepped.find(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) &&
             (e.g?.["include-all"] === true || e.g?.["include-all"] === "true") && hasNodeSource(e));
         // tier4: 放宽名称限制
