@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260815
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260816
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -433,6 +433,9 @@ function main(config) {
         "autodesk.com.edgekey.net",              // Akamai CDN 节点（推断授权校验请求会经此节点回源；拦截后可能影响下载等服务，但授权验证优先级更高）
         "crp.autodesk.com",                      // 云渲染授权
         "autodesk.flexnetoperations.com",        // FlexNet Operations 许可云平台
+        "entitlement.autodesk.com",              // Autodesk 授权端点
+
+
     ];
     const autodeskDomain = [
         "ipm-aem.autodesk.com",                  // 弹窗消息（精确匹配）
@@ -440,7 +443,7 @@ function main(config) {
     const autodeskKeyword = [
         // "adlm",                                  // 桌面许可证模块关键词。⚠️ 4字符短串，存在低概率误伤不相关含 adlm 子串的域名
         "telemetry.autodesk",                    // 遥测模块关键词兜底
-        "entitlement.autodesk",                  // 授权模块关键词兜底
+        "entitlements.autodesk",                 // 授权模块关键词兜底
     ];
 
     // ── 非官方修改补丁后门 ──
@@ -794,7 +797,6 @@ function main(config) {
         "DOMAIN,geo2.adobe.com,REJECT-DROP",                 // Adobe 地理区域识别备用
         "DOMAIN-SUFFIX,accounts.autodesk.com,REJECT-DROP",   // Autodesk 账户登录
         "DOMAIN,ieonline.microsoft.com,REJECT-DROP",         // IE 内核在线检测 / 旧版 Office 激活
-        // "DOMAIN-SUFFIX,entitlement.autodesk.com,REJECT-DROP",// Autodesk 授权端点；被 autodeskKeyword 层规则遮蔽
     ];
 
     // ═══════════════ 3. 规则组装与注入 ═══════════════
