@@ -430,7 +430,7 @@ function main(config) {
         "genuine-software.autodesk.com",         // 正版验证服务
         "edge.activity.autodesk.com",            // 活动/行为追踪
         "developer.api.autodesk.com",            // 开发者 API（含许可验证）
-        "autodesk.com.edgekey.net",              // Akamai CDN 节点（推断授权校验请求会经此回源；拦截后可能影响下载等服务。但授权验证优先级更高）
+        "autodesk.com.edgekey.net",              // Akamai CDN 节点（推断授权校验请求会经此回源；拦截后可能影响下载等服务。但授权拦截优先于相关副作用）
         "crp.autodesk.com",                      // 云渲染授权
         "autodesk.flexnetoperations.com",        // FlexNet Operations 许可云平台
         "entitlement.autodesk.com",              // 疑似 Autodesk 授权端点；待抓包验证
