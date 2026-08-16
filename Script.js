@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260816
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260817
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -356,7 +356,7 @@ function main(config) {
         // "practivate.adobe.com",                   // 预激活服务。该域名可能已失效，待验证
     ];
 
-    const _ADOBE_RAND_RE = "^[A-Za-z0-9]{8,12}\\.adobe\\.io$"; // 匹配8~12位字母/数字.adobe.io 子域
+    const _ADOBE_RAND_RE = "^[A-Za-z0-9]{8,12}\\.adobe\\.io$"; // 匹配随机8~12位字母/数字.adobe.io 子域
     // const _ADOBESTATS_RAND_RE = "^[A-Za-z0-9]{10}\\.adobestats\\.io$"; // 匹配随机10位字母/数字子域
     const adobeRegex = [
         `DOMAIN-REGEX,${_ADOBE_RAND_RE},REJECT`,
@@ -414,7 +414,7 @@ function main(config) {
         "world.corel.com",                        // 消息推送 + 序列号黑名单检查
     ];
 
-    // ── Autodesk (CAD / 3dsMax / Maya) 激活与遥测拦截 ──
+    // ── Autodesk (CAD / 3dsMax / Maya) 授权、遥测及相关端点拦截 ──
     const autodeskSuffix = [
         "adlm.cloud.autodesk.com",               // 许可验证主域
         "adlm-autodesk.com",                     // ADLM 独立许可域
@@ -430,20 +430,18 @@ function main(config) {
         "genuine-software.autodesk.com",         // 正版验证服务
         "edge.activity.autodesk.com",            // 活动/行为追踪
         "developer.api.autodesk.com",            // 开发者 API（含许可验证）
-        "autodesk.com.edgekey.net",              // Akamai CDN 节点（推断授权校验请求会经此节点回源；拦截后可能影响下载等服务，但授权验证优先级更高）
+        "autodesk.com.edgekey.net",              // Akamai CDN 节点（推断授权校验请求会经此回源；拦截后可能影响下载等服务。但授权验证优先级更高）
         "crp.autodesk.com",                      // 云渲染授权
         "autodesk.flexnetoperations.com",        // FlexNet Operations 许可云平台
-        "entitlement.autodesk.com",              // Autodesk 授权端点
-
-
+        "entitlement.autodesk.com",              // 疑似 Autodesk 授权端点；待抓包验证
     ];
     const autodeskDomain = [
         "ipm-aem.autodesk.com",                  // 弹窗消息（精确匹配）
     ];
     const autodeskKeyword = [
         // "adlm",                                  // 桌面许可证模块关键词。⚠️ 4字符短串，存在低概率误伤不相关含 adlm 子串的域名
-        "telemetry.autodesk",                    // 遥测模块关键词兜底
-        "entitlements.autodesk",                 // 授权模块关键词兜底
+        "telemetry.autodesk",                    // Autodesk 遥测域关键词兜底
+        "entitlements.autodesk",                 // Autodesk 授权域关键词兜底
     ];
 
     // ── 非官方修改补丁后门 ──
