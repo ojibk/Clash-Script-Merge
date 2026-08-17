@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260817
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260818
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -391,9 +391,8 @@ function main(config) {
         "senseicore.adobe.io",                    // Sensei AI 服务核心
         "senseimds.adobe.io",                     // Sensei 模型分发服务
     ];
-    // 运行时断言：pushFirefly 只对上面这些域名生成 TCP 限定规则，UDP/QUIC 依赖 udpBlock 的
-    // adobe.io/adobe.com 无协议限定规则兜底拦截——因此这里的每一项都必须落在 adobe.com 或 adobe.io 之下，
-    // 否则该域名的 UDP 流量在 Firefly 禁用时会漏拦，在启用时无法被 udpBlock 强制拦截（可能直连或走代理，具体走向不确定，破坏强制回退 TCP 的设计意图）。
+    // 运行时检查：pushFirefly 只对上面这些域名生成 TCP 限定规则，UDP/QUIC 依赖 udpBlock 的 adobe.io/adobe.com 无协议限定规则兜底拦截——因此这里的每一项都必须落在 adobe.com 
+    // 或 adobe.io 之下，否则该域名的 UDP 流量在 Firefly 禁用时会漏拦，在启用时无法被 udpBlock 强制拦截（可能直连或走代理，具体走向不确定，破坏强制回退 TCP 的设计意图）。
     {
         const _uncovered = adobeFireflyOnly.filter(d => !/\.(adobe\.com|adobe\.io)$/i.test(d));
         if (_uncovered.length) {
