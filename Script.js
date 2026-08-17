@@ -131,7 +131,7 @@ function main(config) {
     let proxyGroupName = null;
     // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为后面的 Hosts DNS 覆写节需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
     const BACKDOOR_BASE_DOMAINS = [
-        "966v26.com",                            // 后门裸域（覆盖其及其全部子域，如曾出现过的 api./status. 等）
+        "966v26.com",                            // 后门裸域（覆盖该域及其所有子域，如曾出现过的 api./status. 等）
         "vposy.com",                             // 非官方修改补丁作者关联域名
         "api.pzz.cn",                            // 国内后门回传接口（主动上报数据的 API 端点）
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
@@ -234,7 +234,7 @@ function main(config) {
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 未在 proxy-groups 中找到同名条目，回退到自动识别`);
             } else if (!_hit.eligible) {
                 // 提前用 eligible 拦一道，避免"这里预选成功、下面排除断言又将其剔除"这种前后矛盾的日志
-                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 命中排除名单（DIRECT/REJECT 等保留名或"全局/所有"类兜底名），回退到自动识别`);
+                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 命中排除名单（DIRECT/REJECT 等保留名，或"全部/所有/默认/直连/拒绝"类排除词），回退到自动识别`);
             } else if (!VALID_PROXY_TYPES.has(_hit.g?.type) || !hasNodeSource(_hit)) {
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 存在，但类型不受支持或未检测到节点来源（type: ${_hit.g?.type}, ${_nodeDesc(_hit.g)}），回退到自动识别`);
             } else {
@@ -392,12 +392,12 @@ function main(config) {
         "senseimds.adobe.io",                     // Sensei 模型分发服务
     ];
     // 运行时断言：pushFirefly 只对上面这些域名生成 TCP 限定规则，UDP/QUIC 依赖 udpBlock 的
-    // adobe.io/adobe.com 无协议限定规则兜底拦截——因此这里的每一项都必须落在 adobe.com 或
-    // adobe.io 之下，否则该域名的 UDP 流量在 Firefly 禁用时会漏拦、在启用时会漏放。
+    // adobe.io/adobe.com 无协议限定规则兜底拦截——因此这里的每一项都必须落在 adobe.com 或 adobe.io 之下，
+    // 否则该域名的 UDP 流量在 Firefly 禁用时会漏拦，在启用时无法被 udpBlock 强制拦截（可能直连或走代理，具体走向不确定，破坏强制回退 TCP 的设计意图）。
     {
         const _uncovered = adobeFireflyOnly.filter(d => !/\.(adobe\.com|adobe\.io)$/i.test(d));
         if (_uncovered.length) {
-            console.error(`❌ adobeFireflyOnly 存在不受 udpBlock 保护的域名，UDP 可能漏放/漏拦: ${_uncovered.join(", ")}`);
+            console.error(`❌ adobeFireflyOnly 存在不受 udpBlock 保护的域名，UDP 可能漏拦或无法被强制拦截: ${_uncovered.join(", ")}`);
         }
     }
 
@@ -750,7 +750,7 @@ function main(config) {
         "DOMAIN-SUFFIX,microsoftpersonalcontent.com,DIRECT", // 微软个人内容 CDN
         "DOMAIN-SUFFIX,msocsp.com,DIRECT",                 // 微软证书吊销列表 (OCSP)
         "DOMAIN-SUFFIX,msedge.net,DIRECT",                 // Microsoft Edge CDN/更新
-        "DOMAIN-SUFFIX,msftconnecttest.com,DIRECT",        // NCSI 连通性探测（拦截后显示「无网络」）
+        "DOMAIN-SUFFIX,msftconnecttest.com,DIRECT",        // NCSI 连通性探测（放行以保持网络状态检测正常，拦截后显示「无网络」）
         "DOMAIN-SUFFIX,msftncsi.com,DIRECT",               // NCSI 旧版探测域
         "DOMAIN-SUFFIX,fonts.adobe.com,DIRECT",            // Adobe Fonts 字体同步服务
         "DOMAIN-SUFFIX,color.adobe.com,DIRECT",            // Adobe Color 配色工具
