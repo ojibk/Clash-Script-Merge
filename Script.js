@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260818
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260819
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -22,7 +22,7 @@ function main(config) {
     const ENABLE_CLIENT_FINGERPRINT    = true;            // TLS 指纹注入开关（为代理节点批量添加 client-fingerprint）
     const DEFAULT_FINGERPRINT          = "chrome";        // TLS 指纹预设
     const FINGERPRINT_SKIP             = [];              // 指纹跳过名单：节点名含这些关键词则不注入指纹
-    const PRIMARY_GROUP_NAME           = "";              // 手动精确指定总控代理组名（留空则启用自动识别 tier2~tier6；tier1 即本字段，留空后不参与自动识别）；填写时必须与代理组名完全一致（区分大小写），仅此一处生效，不做模糊匹配
+    const PRIMARY_GROUP_NAME           = "";              // tier1：手动精确指定总控代理组名（留空时跳过 tier1，进入 tier2~tier6 自动识别）；填写时必须与代理组名完全一致（区分大小写），仅此一处生效，不做模糊匹配
     const fireflyUseProxy              = ENABLE_FIREFLY && ENABLE_BLOCK;  // 派生开关：决定 Firefly 规则的路由目标与动作（allow层代理 / block层拦截）
 
     // ═══════════════ 防御性检查 ═══════════════
@@ -83,7 +83,7 @@ function main(config) {
     } else if (!Array.isArray(config.proxies)) {
         console.log("ℹ️ config.proxies 不是数组，跳过指纹注入");
     } else {
-        const _VALID = new Set(["chrome","firefox","safari","iOS","android","edge","360","qq","random","none"]); // "none" 值理论无法被触发,保留仅为枚举完整性
+        const _VALID = new Set(["chrome","firefox","safari","iOS","android","edge","360","qq","random"]);
         let _rawFP;
         if (_VALID.has(DEFAULT_FINGERPRINT)) {
             _rawFP = DEFAULT_FINGERPRINT;
@@ -131,7 +131,7 @@ function main(config) {
     let proxyGroupName = null;
     // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为后面的 Hosts DNS 覆写节需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
     const BACKDOOR_BASE_DOMAINS = [
-        "966v26.com",                            // 后门裸域（覆盖该域及其所有子域，如曾出现过的 api./status. 等）
+        "966v26.com",                            // 后门裸域（覆盖该域及其所有子域，如 api./status. 等子域）
         "vposy.com",                             // 非官方修改补丁作者关联域名
         "api.pzz.cn",                            // 国内后门回传接口（主动上报数据的 API 端点）
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
@@ -234,7 +234,7 @@ function main(config) {
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 未在 proxy-groups 中找到同名条目，回退到自动识别`);
             } else if (!_hit.eligible) {
                 // 提前用 eligible 拦一道，避免"这里预选成功、下面排除断言又将其剔除"这种前后矛盾的日志
-                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 命中排除名单（DIRECT/REJECT 等保留名，或"全部/所有/默认/直连/拒绝"类排除词），回退到自动识别`);
+                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 不符合代理组要求（命中保留目标/排除词，或不允许作为总控组），回退到自动识别`);
             } else if (!VALID_PROXY_TYPES.has(_hit.g?.type) || !hasNodeSource(_hit)) {
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 存在，但类型不受支持或未检测到节点来源（type: ${_hit.g?.type}, ${_nodeDesc(_hit.g)}），回退到自动识别`);
             } else {
@@ -396,7 +396,7 @@ function main(config) {
     {
         const _uncovered = adobeFireflyOnly.filter(d => !/\.(adobe\.com|adobe\.io)$/i.test(d));
         if (_uncovered.length) {
-            console.error(`❌ adobeFireflyOnly 存在不受 udpBlock 保护的域名，UDP 可能漏拦或无法被强制拦截: ${_uncovered.join(", ")}`);
+            console.error(`❌ adobeFireflyOnly 存在无法被 udpBlock 覆盖的域名，UDP/QUIC 将失去强制回退 TCP 保护: ${_uncovered.join(", ")}`);
         }
     }
 
