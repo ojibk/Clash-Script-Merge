@@ -804,8 +804,18 @@ function main(config) {
         for (const k of LAYER_ORDER) if (!(k in layerPools)) throw new Error(`[Script] LAYER_ORDER 键 '${k}' 不在 layerPools 中`);
         for (const k of Object.keys(layerPools)) if (!_orderSet.has(k)) throw new Error(`[Script] layerPools 键 '${k}' 不在 LAYER_ORDER 中`);
         const pushLayer = (l, r) => {
-            if (!(l in layerPools)) throw new Error(`[Script] 未知层 '${l}'，请检查 layerPools 键名`);
-            for (const x of r) layerPools[l].push(x);
+            if (!(l in layerPools)) {
+                throw new Error(`[Script] 未知层 '${l}'，请检查 layerPools 键名`);
+            }
+            if (!Array.isArray(r)) {
+                throw new TypeError(`[Script] 层 '${l}' 的规则集合必须为数组`);
+            }
+            for (const x of r) {
+                if (typeof x !== "string" || !x) {
+                    throw new TypeError(`[Script] 层 '${l}' 存在非空字符串以外的规则项`);
+                }
+                layerPools[l].push(x);
+            }
         };
 
         if (ENABLE_BLOCK) {
