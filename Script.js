@@ -146,7 +146,7 @@ function main(config) {
     const VALID_PROXY_TYPES = new Set(["select","url-test","fallback","load-balance","smart"]);
     const NONROUTABLE_TYPES = new Set(["relay","url-latency-benchmark"]);
 
-    // 运行时断言：FALLBACK_NAMES 与 EXCLUDED_NAMES 必须互斥
+    // 防回归断言：当前“全局”只应匹配 FALLBACK_CN_RE，不应同时命中 EXCLUDED_CN_RE；若未来修改导致重叠将立即报错
     {
         const _overlap = [...FALLBACK_NAMES].filter(n => EXCLUDED_NAMES.has(n));
         if (_overlap.length) {
@@ -749,7 +749,7 @@ function main(config) {
         "DOMAIN-SUFFIX,microsoftpersonalcontent.com,DIRECT", // 微软个人内容 CDN
         "DOMAIN-SUFFIX,msocsp.com,DIRECT",                 // 微软证书吊销列表 (OCSP)
         "DOMAIN-SUFFIX,msedge.net,DIRECT",                 // Microsoft Edge CDN/更新
-        "DOMAIN-SUFFIX,msftconnecttest.com,DIRECT",        // NCSI 连通性探测（放行以保持网络状态检测正常，拦截后显示「无网络」）
+        "DOMAIN-SUFFIX,msftconnecttest.com,DIRECT",        // NCSI 连通性探测（直连以保持网络状态检测正常，异常时显示「无网络」）
         "DOMAIN-SUFFIX,msftncsi.com,DIRECT",               // NCSI 旧版探测域
         "DOMAIN-SUFFIX,fonts.adobe.com,DIRECT",            // Adobe Fonts 字体同步服务
         "DOMAIN-SUFFIX,color.adobe.com,DIRECT",            // Adobe Color 配色工具
@@ -936,14 +936,12 @@ function main(config) {
                 const scriptManaged = new Set([...currentManaged, ...LEGACY_CLEANUP_ENTRIES.map(s => s.toLowerCase())]);
 
                 if (DEBUG_FAKEIPFILTER_CLEANUP) {
-                    // 精确匹配：判断该条目是否与 currentManaged（由 BACKDOOR_BASE_DOMAINS 自动生成的
-                    // +.d / d / *.d 三种形式）字符串完全相同。
-                    // ⚠️ 注意，这里必须用精确匹配，不能用"是否落在某个活跃域名的通配范围内"这种语义匹配——
-                    // 实际负责清理 fake-ip-filter 的逻辑（下面的 scriptManaged.has(s)）就是精确字符串匹配，
-                    // 二者标准必须一致，否则会出现"语义上已被覆盖，但精确匹配清理不掉"的条目被误判为可删除。
+                    // 精确匹配：判断该条目是否与 currentManaged（由 BACKDOOR_BASE_DOMAINS 自动生成的 +.d / d / *.d 三种形式）字符串完全相同。
+                    // ⚠️ 注意，这里必须用精确匹配，不能用"是否落在某个活跃域名的通配范围内"这种语义匹配实际负责清理 fake-ip-filter 的逻辑
+                    // （下面的 scriptManaged.has(s)就是精确字符串匹配），二者标准必须一致，否则会出现"语义上已被覆盖，但精确匹配清理不掉"的条目被误判为可删除。
                     // 典型例子：BACKDOOR_BASE_DOMAINS 里的 "966v26.com" 只会自动生成 "+.966v26.com" 等 3 种形式，
-                    // 并不包含 "api.966v26.com" 这个具体字符串——若把它当作"已被覆盖"从 LEGACY_CLEANUP_ENTRIES 删掉，
-                    // 以后残留在用户 fake-ip-filter 里的这个具体字符串就再也清不掉了。
+                    // 并不包含 "api.966v26.com" 这个具体字符串——若把它当作"已被覆盖"从 LEGACY_CLEANUP_ENTRIES 删掉，以后残留在用户 fake-ip-filter 里的这个具体字符串就再也清不掉了。
+                    // 当前结果为空，仅表示当前两组字符串没有精确重合，并不代表检查失效
                     const redundant = LEGACY_CLEANUP_ENTRIES.filter(e => currentManaged.has(e.toLowerCase()));
                     if (redundant.length) console.warn("⚠️ 历史托管域名中存在与当前自动生成集合完全重复的冗余条目，可安全清理:", redundant);
                 }
