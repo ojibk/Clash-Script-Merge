@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260820
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260821
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -146,7 +146,7 @@ function main(config) {
     const VALID_PROXY_TYPES = new Set(["select","url-test","fallback","load-balance","smart"]);
     const NONROUTABLE_TYPES = new Set(["relay","url-latency-benchmark"]);
 
-    // 防回归断言：当前“全局”只应匹配 FALLBACK_CN_RE，不应同时命中 EXCLUDED_CN_RE；若未来修改导致重叠将立即报错
+    // 防回归断言：FALLBACK_NAMES 与 EXCLUDED_NAMES 必须互斥；若未来修改导致重叠将立即报错
     {
         const _overlap = [...FALLBACK_NAMES].filter(n => EXCLUDED_NAMES.has(n));
         if (_overlap.length) {
@@ -154,7 +154,7 @@ function main(config) {
             throw new Error("proxy-group-setup-aborted: FALLBACK_NAMES/EXCLUDED_NAMES 断言失败");
         }
     }
-    // 运行时断言：FALLBACK_CN_RE 与 EXCLUDED_CN_RE 对"全局"必须互斥
+    // 防回归断言：当前“全局”只应匹配 FALLBACK_CN_RE，不应同时命中 EXCLUDED_CN_RE；若未来修改导致重叠将立即报错
     if (FALLBACK_CN_RE.test("全局") && EXCLUDED_CN_RE.test("全局")) {
         console.error(`❌ 配置断言失败："全局"同时匹配 FALLBACK_CN_RE 和 EXCLUDED_CN_RE`);
         throw new Error("proxy-group-setup-aborted: FALLBACK_CN_RE/EXCLUDED_CN_RE 断言失败");
