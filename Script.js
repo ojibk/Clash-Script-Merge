@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260821
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260822
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -8,7 +8,7 @@ function main(config) {
     const _startTime = Date.now();
 
     // ═══════════════ 配置区（按需调整） ═══════════════
-    const ENABLE_SCRIPT                = true;            // 脚本功能注入总开关（关闭时仍执行遗留标记清理）
+    const ENABLE_SCRIPT                = true;            // 脚本总开关（关闭时仍执行遗留标记清理）
     const ENABLE_BLOCK                 = true;            // 拦截模块
     const ENABLE_FIREFLY               = true;            // Firefly 放行（需 ENABLE_BLOCK=true）
     const ENABLE_PROCESS_RULE          = true;            // 进程规则（需 TUN + 管理员权限）
@@ -21,7 +21,7 @@ function main(config) {
     const DEBUG_FAKEIPFILTER_CLEANUP   = false;           // 检查 fake-ip-filter 中是否残留已废弃的历史托管域名（调试用）
     const ENABLE_CLIENT_FINGERPRINT    = true;            // TLS 指纹注入开关（为代理节点批量添加 client-fingerprint）
     const DEFAULT_FINGERPRINT          = "chrome";        // TLS 指纹预设
-    const FINGERPRINT_SKIP             = [];              // 指纹跳过名单：节点名含这些关键词则不注入指纹
+    const FINGERPRINT_SKIP             = [];              // 指纹跳过名单：节点名包含这些关键词（汉字子串匹配；非汉字按边界匹配，避免误伤子串）
     const PRIMARY_GROUP_NAME           = "";              // tier1：手动精确指定总控代理组名（留空时跳过 tier1，进入 tier2~tier6 自动识别）；填写时必须与代理组名完全一致（区分大小写），仅此一处生效，不做模糊匹配
     const fireflyUseProxy              = ENABLE_FIREFLY && ENABLE_BLOCK;  // 派生开关：决定 Firefly 规则的路由目标与动作（allow层代理 / block层拦截）
 
@@ -56,7 +56,11 @@ function main(config) {
             }
             newRules.push(rule);
         }
-        if (_blockStartLengths.length) console.warn(`⚠️ ${_blockStartLengths.length} 个未闭合哨兵块`);
+        if (_blockStartLengths.length) {
+            console.warn(`⚠️ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，已截断到第一个未闭合 START 之前`);
+            // 截断到最早未闭合 START 之前，删除该 START 之后的所有内容。否则这些内容会永久脱离哨兵扫描范围，后续运行无法自愈。
+            newRules.length = _blockStartLengths[0];
+        }
         if (_orphanEndCount) console.warn(`⚠️ ${_orphanEndCount} 个孤立 END`);
         config.rules = newRules;
     }
@@ -179,7 +183,11 @@ function main(config) {
         const _NON_PROXY_TARGETS = new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"]);
         // 仅做单层字面量检测：若 proxies 指向另一个策略组、而该组本身才是纯伪目标终点，此处不会递归展开发现。
         // 现实中的"伪装组"多采用平铺声明（如 Remnawave 的 "No Proxy"），此为架构设计上已知、可接受的妥协边界情况。
-        const isRealProxyEntry = p => typeof p === "string" && !_NON_PROXY_TARGETS.has(p.trim().toUpperCase());
+        const isRealProxyEntry = p => {
+            if (typeof p !== "string") return false;
+            const t = p.trim();
+            return t !== "" && !_NON_PROXY_TARGETS.has(t.toUpperCase());
+        };
         const hasRealProxies = g => Array.isArray(g?.proxies) && g.proxies.some(isRealProxyEntry);
 
         // 节点来源单一数据源（hasNodeSource 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
@@ -288,7 +296,7 @@ function main(config) {
         throw new Error("proxy-group-setup-aborted: proxy-groups 为空");
     }
 
-    // 代理组排除断言与 Token 断言
+    // 代理组排除断言
     {
         const s = sanitizeName(proxyGroupName);
         if (!s || EXCLUDED_NAMES.has(s.toUpperCase()) || EXCLUDED_CN_RE.test(s)) {
@@ -316,7 +324,8 @@ function main(config) {
     });
 
     // ── Adobe 共用鉴权端点（包括 Firefly 和 CC） ──
-    // 受控于 fireflyUseProxy = ENABLE_FIREFLY && ENABLE_BLOCK 两个开关，Firefly 启用时路由至代理组，Firefly 禁用时以 REJECT 拦截。
+    // 受控于 fireflyUseProxy = ENABLE_FIREFLY && ENABLE_BLOCK。当 ENABLE_BLOCK=true：ENABLE_FIREFLY=true → 代理组；ENABLE_FIREFLY=false → REJECT。
+    // 当 ENABLE_BLOCK=false：整个 adobeSharedDeps 不注入任何层（既不代理也不拦截）。
     // 此处走 pushSuffix(无协议限定)，故 UDP 与 TCP 遵循相同的目标动作(Firefly 启用时二者皆走代理组，禁用时二者皆被 REJECT)，
     // UDP 最终是否经该代理组转发，还取决于所选出口是否支持 UDP。不像 adobeFireflyOnly 那样单独对 UDP 做 udpBlock 强制拦截。
     const adobeSharedDeps = [
