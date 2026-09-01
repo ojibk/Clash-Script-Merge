@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260822
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260901
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -57,9 +57,9 @@ function main(config) {
             newRules.push(rule);
         }
         if (_blockStartLengths.length) {
-            console.warn(`⚠️ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，已截断到第一个未闭合 START 之前`);
-            // 截断到最早未闭合 START 之前，删除该 START 之后的所有内容。否则这些内容会永久脱离哨兵扫描范围，后续运行无法自愈。
-            newRules.length = _blockStartLengths[0];
+            console.warn(`⚠️ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，内容已保留未清理`);
+            // 不做自动截断：未闭合 START 之后混杂的内容里，哪些是脚本自己的孤儿注入、哪些是用户自己添加的规则，无法在哨兵结构本身已损坏的情况下安全区分。截断会连带误删损坏点之后所有
+            // 与哨兵块无关的用户规则，是不可逆的静默数据丢失，代价高于"孤儿注入内容永久滞留"这个影响较小、且用户自己能在配置里看到并手动清理的问题。因此只警告，不自动处理。
         }
         if (_orphanEndCount) console.warn(`⚠️ ${_orphanEndCount} 个孤立 END`);
         config.rules = newRules;
@@ -141,7 +141,7 @@ function main(config) {
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
     ];
     // 设计说明：Hosts DNS 覆写在逻辑上独立于代理组识别与规则组装。即使代理组注入失败（如无可用节点），仍继续尝试执行 Hosts 覆写。
-    // 因此此处主动抛出异常，交由外层 catch 统一捕获，确保 Hosts 覆写步骤不被跳过。
+    // 因此规则组装异常由外层 catch 隔离，确保仍会进入 Hosts 覆写阶段。
     try {
     const EXCLUDED_NAMES = new Set(["DIRECT","REJECT","REJECT-DROP","COMPATIBLE","DEFAULT","MATCH","PASS"]);
     const FALLBACK_NAMES = new Set(["GLOBAL"]);
@@ -179,26 +179,26 @@ function main(config) {
             return { g, clean, fallback: _isFallback(clean), eligible: _isEligible(clean) };
         });
 
-        // ═══════════════ 非代理目标常量（用于区分真实节点与 DIRECT/REJECT 等非代理目标） ═══════════════
-        const _NON_PROXY_TARGETS = new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"]);
-        // 仅做单层字面量检测：若 proxies 指向另一个策略组、而该组本身才是纯伪目标终点，此处不会递归展开发现。
-        // 现实中的"伪装组"多采用平铺声明（如 Remnawave 的 "No Proxy"），此为架构设计上已知、可接受的妥协边界情况。
-        const isRealProxyEntry = p => {
+        // ═══════════════ 保留代理目标常量（用于排除已知的非代理特殊目标） ═══════════════
+        const _RESERVED_PROXY_TARGETS = new Set(["DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"]);
+        // 仅做单层字面量检测：若 proxies 引用其他策略组，此处不会递归展开判断其最终是否包含真实代理来源。
+        // 此为有意保留的边界，避免为代理组识别引入递归展开及循环引用处理。
+        const isNonReservedProxyTarget = p => {
             if (typeof p !== "string") return false;
             const t = p.trim();
-            return t !== "" && !_NON_PROXY_TARGETS.has(t.toUpperCase());
+            return t !== "" && !_RESERVED_PROXY_TARGETS.has(t.toUpperCase());
         };
-        const hasRealProxies = g => Array.isArray(g?.proxies) && g.proxies.some(isRealProxyEntry);
+        const hasAnyNonReservedProxyTarget = g => Array.isArray(g?.proxies) && g.proxies.some(isNonReservedProxyTarget);
 
         // 节点来源单一数据源（hasNodeSource 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
         // ⚠️ 设计取舍说明：hasNodeSource 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
         //   若组A仅有1个静态节点，组B有50个 provider 节点，some() 对两者均返回 true；在 tier2/tier4 的 find() 中，匹配的第一个检测到节点来源组即被选中，而非“节点最多”的组。
         // 原因：1. 静态节点通常是用户精选的高质量节点，“少而精”可能优于“多而杂”；2. 避免为统计节点总数引入额外遍历开销。
-        // ⚠️ 节点来源检测只判断配置结构：不检查实际节点数量、过滤结果、健康状态或 provider 加载状态。新增节点来源方式时，在此追加 test/desc。
+        // ⚠️ 节点来源检测只判断配置中存在一种可接受的节点来源形态：不检查实际节点数量、过滤结果、健康状态或 provider 加载状态。新增节点来源方式时，在此追加 test/desc。
         const NODE_SOURCE_CHECKS = [
             {
-                test: g => hasRealProxies(g),
-                desc: g => `${g.proxies.filter(isRealProxyEntry).length} 节点(静态)`,  // 静态节点列表（排除纯 DIRECT/REJECT 伪装组）
+                test: g => hasAnyNonReservedProxyTarget(g),
+                desc: g => `${g.proxies.filter(isNonReservedProxyTarget).length} 个非保留 proxies 项`,
             },
             {
                 test: g => Array.isArray(g?.use) && g.use.length > 0,
