@@ -57,11 +57,9 @@ function main(config) {
             newRules.push(rule);
         }
         if (_blockStartLengths.length) {
-            console.warn(`⚠️ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，内容已保留未清理`);
-            // 不做自动截断：未闭合 START 之后混杂的内容里，哪些是脚本自己的孤儿注入、哪些是用户自己
-            // 添加的规则，无法在哨兵结构本身已损坏的情况下安全区分。截断会连带误删损坏点之后所有
-            // 与哨兵块无关的用户规则，是不可逆的静默数据丢失，代价高于"孤儿注入内容永久滞留"这个
-            // 影响较小、且用户自己能在配置里看到并手动清理的问题。因此只警告，不自动处理。
+            console.warn(`⚠️ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，已截断到第一个未闭合 START 之前`);
+            // 截断到最早未闭合 START 之前，删除该 START 之后的所有内容。否则这些内容会永久脱离哨兵扫描范围，后续运行无法自愈。
+            newRules.length = _blockStartLengths[0];
         }
         if (_orphanEndCount) console.warn(`⚠️ ${_orphanEndCount} 个孤立 END`);
         config.rules = newRules;
