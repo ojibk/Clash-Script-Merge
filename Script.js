@@ -20,8 +20,8 @@ function main(config) {
     const HOSTS_MODE                   = "ipv4-loopback"; // 模式: ipv4-loopback | ipv4-blackhole | dual-loopback | dual-blackhole
     const DEBUG_FAKEIPFILTER_CLEANUP   = false;           // 检查 fake-ip-filter 中是否残留已废弃的历史托管域名（调试用）
     const ENABLE_CLIENT_FINGERPRINT    = true;            // TLS 指纹注入开关（为代理节点批量添加 client-fingerprint）
-    const DEFAULT_FINGERPRINT          = "chrome";        // TLS 指纹预设
-    const FINGERPRINT_SKIP             = [];              // 指纹跳过名单：节点名包含这些关键词（汉字子串匹配；非汉字按边界匹配，避免误伤子串）
+    const DEFAULT_FINGERPRINT          = "chrome";        // TLS 指纹默认预设（仅对未设置 client-fingerprint 的代理节点生效）
+    const FINGERPRINT_SKIP             = [];              // 指纹跳过名单：节点名包含这些关键词（汉字按子串匹配；非汉字按预定义分隔符边界匹配，避免误伤更长子串）
     const PRIMARY_GROUP_NAME           = "";              // tier1：手动精确指定总控代理组名（留空时跳过 tier1，进入 tier2~tier6 自动识别）；填写时必须与代理组名完全一致（区分大小写），仅此一处生效，不做模糊匹配
     const fireflyUseProxy              = ENABLE_FIREFLY && ENABLE_BLOCK;  // 派生开关：决定 Firefly 规则的路由目标与动作（allow层代理 / block层拦截）
 
@@ -33,7 +33,7 @@ function main(config) {
     if (!Array.isArray(config["proxy-groups"])) config["proxy-groups"] = [];
 
     if (ENABLE_FIREFLY && !ENABLE_BLOCK) console.warn("⚠️ Firefly 放行需 ENABLE_BLOCK=true");
-    if (ENABLE_FIREFLY && ENABLE_AGGRESSIVE && !ENABLE_BLOCK) console.warn("⚠️ ENABLE_BLOCK=false 时 aggressiveRules 会对 adobe.io 无差别 REJECT-DROP，Firefly 将不仅失去白名单特权，更会被直接切断");
+    if (ENABLE_FIREFLY && ENABLE_AGGRESSIVE && !ENABLE_BLOCK) console.warn("⚠️ ENABLE_BLOCK=false 时 aggressiveRules 会对 adobe.io 无差别 REJECT-DROP，Firefly 的 adobe.io 端点将失去白名单特权并被直接拦截");
     if (ENABLE_PROCESS_RULE && config["find-process-mode"] !== "strict" && config["find-process-mode"] !== "always") {
         console.warn(`⚠️ 进程规则要求 find-process-mode=strict/always，当前 [${config["find-process-mode"] ?? "未设置"}]`);
     }
@@ -57,9 +57,9 @@ function main(config) {
             newRules.push(rule);
         }
         if (_blockStartLengths.length) {
-            console.error(`❌ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，未自动清理其内容，以避免误删用户规则`);
-            // 不做自动截断：未闭合 START 后的内容无法安全区分脚本残留与用户规则。为避免误删用户数据，仅报告异常并保留该区域内容。截断会连带误删损坏点之后所有
-            // 与哨兵块无关的用户规则，是不可逆的静默数据丢失，代价高于"孤儿注入内容永久滞留"这个影响较小、且用户自己能在配置里看到并手动清理的问题。因此仅记录错误，不自动处理。
+            console.error(`❌ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，未自动清理其后内容，以避免误删用户规则`);
+            // 不做自动截断：未闭合 START 后的内容无法安全区分脚本残留与用户规则。为避免误删用户数据，仅报告错误并保留该区域内容；残留规则需由用户人工处理。截断会连带误删损坏点之后
+            // 所有与哨兵块无关的用户规则，是不可逆的静默数据丢失，代价高于"孤儿注入内容永久滞留"这个影响较小、且用户自己能在配置里看到并手动清理的问题。因此仅记录错误，不自动处理。
         }
         if (_orphanEndCount) console.warn(`⚠️ ${_orphanEndCount} 个孤立 END`);
         config.rules = newRules;
@@ -127,7 +127,7 @@ function main(config) {
                 p['client-fingerprint'] = _effectiveFP;
                 return p;
             });
-            console.log(`✅ TLS 指纹注入完成: 新增 ${inj}，跳过 ${skip}，已有 ${exist}； 指纹: ${_effectiveFP}`);
+            console.log(`✅ TLS 指纹注入完成: 新增 ${inj}，跳过 ${skip}，已有字段 ${exist}； 指纹: ${_effectiveFP}`);
         }
     }
 
@@ -318,7 +318,7 @@ function main(config) {
     const pushKeyword = (d, a, p) => d.forEach(v => { if (typeof v === "string" && v) p.push(`DOMAIN-KEYWORD,${v},${a}`); });
 
     // Firefly 专属域名的 TCP 限定规则：仅对 adobeFireflyOnly 中的域名生成 TCP 条件匹配，令这些域名的 UDP/QUIC 不经本层，
-    // 交由 udpBlock 的 adobe.io/adobe.com 规则拦截，以 REJECT 快速失败强制回退 TCP。
+    // 交由 udpBlock 的 adobe.io/adobe.com 规则拦截，以 REJECT 让 UDP/QUIC 快速失败，为支持回退的客户端提供 TCP 回退条件。
     const pushFirefly = (d, a, p) => d.forEach(v => {
         if (typeof v === "string" && v) p.push(`AND,((NETWORK,TCP),(DOMAIN-SUFFIX,${v})),${a}`);
     });
@@ -372,7 +372,7 @@ function main(config) {
         // `DOMAIN-REGEX,${_ADOBESTATS_RAND_RE},REJECT`, // 已被 adobeSuffix 的 "adobestats.io" 规则遮蔽
     ];
 
-    // ── UDP / QUIC 拦截（强制回退 TCP）──
+    // ── UDP / QUIC 拦截（为 TCP 回退提供条件）──
     // ⚠️ 当 ENABLE_BLOCK=true 时，UDP 流量在 block 层已被 udpBlock 拦截（REJECT），因此 direct 层的 fonts/color/assets 规则对 UDP 永远不可达，实际只走 TCP DIRECT。
     // 使用 REJECT 而非 REJECT-DROP，目的是让 QUIC 立即失败以加速回退 TCP，避免静默丢弃导致超时等待，拖慢 Firefly 等放行服务的首次连接速度。
     const udpBlock = [
@@ -405,7 +405,7 @@ function main(config) {
     {
         const _uncovered = adobeFireflyOnly.filter(d => !/\.(adobe\.com|adobe\.io)$/i.test(d));
         if (_uncovered.length) {
-            console.error(`❌ adobeFireflyOnly 存在无法被 udpBlock 覆盖的域名，UDP/QUIC 将失去强制回退 TCP 保护: ${_uncovered.join(", ")}`);
+            console.error(`❌ adobeFireflyOnly 存在无法被 udpBlock 覆盖的域名，UDP/QUIC 将失去预期的 TCP 回退保护条件: ${_uncovered.join(", ")}`);
         }
     }
 
@@ -899,7 +899,7 @@ function main(config) {
             console.log(`   全局关键词阻断: ❌`);
         console.log(`   直连规则: ${ENABLE_DIRECT ? "✅" : "❌"}`);
         console.log(`   Hosts 覆写: ${ENABLE_HOSTS_OVERRIDE ? "✅ [" + HOSTS_MODE + "]" : "❌"}`);
-        console.warn("⚠️ [udpBlock] 所有 UDP 规则依赖域名识别（Fake-IP / Sniffer），ECH 下可能全部失效。");
+        console.warn("⚠️ [udpBlock] 规则依赖域名识别（Fake-IP / Sniffer），ECH 导致 SNI 无法获取时，相关 UDP 规则可能无法命中。");
         console.log(`   ▶ 注入规则条目分层统计:`);
         const _LAYER_LABELS = { allow:"白名单/条件代理优先层", block:"拦截层", process:"进程层", proxy:"代理层", aggressive:"激进层", direct:"直连层" };
         for (const k of LAYER_ORDER) {
@@ -962,7 +962,7 @@ function main(config) {
                     // 并不包含 "api.966v26.com" 这个具体字符串——若把它当作"已被覆盖"从 LEGACY_CLEANUP_ENTRIES 删掉，以后残留在用户 fake-ip-filter 里的这个具体字符串就再也清不掉了。
                     // 当前结果为空，仅表示当前两组字符串没有精确重合，并不代表检查失效
                     const redundant = LEGACY_CLEANUP_ENTRIES.filter(e => currentManaged.has(e.toLowerCase()));
-                    if (redundant.length) console.warn("⚠️ 历史托管域名中存在与当前自动生成集合完全重复的冗余条目，可安全清理:", redundant);
+                    if (redundant.length) console.warn("⚠️ 历史托管域名中存在与当前自动生成集合完全重复的冗余条目，将自动清理:", redundant);
                 }
 
                 const existing = new Set(), cleaned = [];
