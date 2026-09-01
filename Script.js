@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260901
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260822
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -57,11 +57,9 @@ function main(config) {
             newRules.push(rule);
         }
         if (_blockStartLengths.length) {
-            console.warn(`⚠️ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，内容已保留未清理`);
-            // 不做自动截断：未闭合 START 之后混杂的内容里，哪些是脚本自己的孤儿注入、哪些是用户自己
-            // 添加的规则，无法在哨兵结构本身已损坏的情况下安全区分。截断会连带误删损坏点之后所有
-            // 与哨兵块无关的用户规则，是不可逆的静默数据丢失，代价高于"孤儿注入内容永久滞留"这个
-            // 影响较小、且用户自己能在配置里看到并手动清理的问题。因此只警告，不自动处理。
+            console.warn(`⚠️ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，已截断到第一个未闭合 START 之前`);
+            // 截断到最早未闭合 START 之前，删除该 START 之后的所有内容。否则这些内容会永久脱离哨兵扫描范围，后续运行无法自愈。
+            newRules.length = _blockStartLengths[0];
         }
         if (_orphanEndCount) console.warn(`⚠️ ${_orphanEndCount} 个孤立 END`);
         config.rules = newRules;
@@ -142,7 +140,7 @@ function main(config) {
         "api.pzz.cn",                            // 国内后门回传接口（主动上报数据的 API 端点）
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
     ];
-    // 设计说明：Hosts DNS 覆写在逻辑上独立于代理组识别与规则组装。即使代理组注入失败（如无可用节点），Hosts 覆写仍须强制执行。
+    // 设计说明：Hosts DNS 覆写在逻辑上独立于代理组识别与规则组装。即使代理组注入失败（如无可用节点），仍继续尝试执行 Hosts 覆写。
     // 因此此处主动抛出异常，交由外层 catch 统一捕获，确保 Hosts 覆写步骤不被跳过。
     try {
     const EXCLUDED_NAMES = new Set(["DIRECT","REJECT","REJECT-DROP","COMPATIBLE","DEFAULT","MATCH","PASS"]);
@@ -236,7 +234,7 @@ function main(config) {
         };
 
         // tier（层级）多级降级识别：tier1 优先采用手动精确指定，tier2 匹配名称含关键词的合格策略组，tier3 包含 include-all，tier4 放宽名称限制，tier5 降级使用兜底组，tier6 最终容错
-        // tier1: 手动精确指定（PRIMARY_GROUP_NAME 非空时）——完全绕开下面的启发式识别，把选择权交还给用户
+        // tier1: 手动精确指定（PRIMARY_GROUP_NAME 非空时）——跳过 tier2~tier6 的启发式识别，直接验证用户指定组，把选择权交还给用户
         let entry = null;
         if (PRIMARY_GROUP_NAME) {
             const _hit = prepped.find(e => e.g?.name === PRIMARY_GROUP_NAME);
@@ -760,7 +758,7 @@ function main(config) {
         "DOMAIN-SUFFIX,microsoftpersonalcontent.com,DIRECT", // 微软个人内容 CDN
         "DOMAIN-SUFFIX,msocsp.com,DIRECT",                 // 微软证书吊销列表 (OCSP)
         "DOMAIN-SUFFIX,msedge.net,DIRECT",                 // Microsoft Edge CDN/更新
-        "DOMAIN-SUFFIX,msftconnecttest.com,DIRECT",        // NCSI 连通性探测（直连以保持网络状态检测正常，异常时显示「无网络」）
+        "DOMAIN-SUFFIX,msftconnecttest.com,DIRECT",        // NCSI 连通性探测（直连以确保网络状态检测正常；拦截可能导致 Windows 显示「无网络」）
         "DOMAIN-SUFFIX,msftncsi.com,DIRECT",               // NCSI 旧版探测域
         "DOMAIN-SUFFIX,fonts.adobe.com,DIRECT",            // Adobe Fonts 字体同步服务
         "DOMAIN-SUFFIX,color.adobe.com,DIRECT",            // Adobe Color 配色工具
@@ -994,4 +992,3 @@ function main(config) {
 
     return config;
 }
-
