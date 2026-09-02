@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260902
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260903
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -374,7 +374,7 @@ function main(config) {
 
     // ── UDP / QUIC 拦截（为 TCP 回退提供条件）──
     // ⚠️ 当 ENABLE_BLOCK=true 时，相关 UDP 流量在 block 层已被 udpBlock 拦截（REJECT），因此 direct 层的 fonts/color/assets 规则不会直接匹配这些 UDP；支持 TCP 回退的客户端在回退后才可能命中对应的 TCP DIRECT 规则。
-    // 使用 REJECT 而非 REJECT-DROP，目的是让 QUIC 立即失败以加速回退 TCP，避免静默丢弃导致超时等待，拖慢 Firefly 等放行服务的首次连接速度。
+    // 使用 REJECT 而非 REJECT-DROP，目的是使 UDP/QUIC 更快失败以加速回退 TCP，避免静默丢弃导致超时等待，拖慢 Firefly 等放行服务的首次连接速度。
     const udpBlock = [
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.io)),REJECT",
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.com)),REJECT",
@@ -694,7 +694,7 @@ function main(config) {
     const processBlockRules = [
         // "AND,((NETWORK,UDP),(DST-PORT,443),(PROCESS-NAME,AdobeGCClient.exe)),REJECT-DROP", // 仅 UDP 443
         // "AND,((NETWORK,UDP),(PROCESS-NAME,AdobeGCClient.exe)),REJECT-DROP", // 全部 UDP
-        "PROCESS-NAME,AdobeGCClient.exe,REJECT-DROP",        // Adobe 正版验证进程；在前置域名规则未命中时，兜底拦截其未知激活流量（TCP+UDP）
+        "PROCESS-NAME,AdobeGCClient.exe,REJECT-DROP",        // Adobe 正版验证进程；在前置域名规则未命中时，兜底拦截该进程的剩余流量（TCP+UDP）
         "PROCESS-NAME,AdskLicensingService.exe,REJECT-DROP", // Autodesk 许可验证
         "PROCESS-NAME,AdskAccess.exe,REJECT-DROP",           // Autodesk 访问控制
         "PROCESS-NAME,AdskIdentityManager.exe,REJECT-DROP",  // Autodesk 身份认证
