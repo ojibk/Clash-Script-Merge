@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260901
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260902
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -18,9 +18,9 @@ function main(config) {
     const ENABLE_DIRECT                = true;            // 直连模块
     const ENABLE_HOSTS_OVERRIDE        = true;            // Hosts DNS 覆写
     const HOSTS_MODE                   = "ipv4-loopback"; // 模式: ipv4-loopback | ipv4-blackhole | dual-loopback | dual-blackhole
-    const DEBUG_FAKEIPFILTER_CLEANUP   = false;           // 检查 fake-ip-filter 中是否残留已废弃的历史托管域名（调试用）
-    const ENABLE_CLIENT_FINGERPRINT    = true;            // TLS 指纹注入开关（为代理节点批量添加 client-fingerprint）
-    const DEFAULT_FINGERPRINT          = "chrome";        // TLS 指纹默认预设（仅对未设置 client-fingerprint 的代理节点生效）
+    const DEBUG_FAKEIPFILTER_CLEANUP   = false;           // 调试检查：检测历史清理项与当前自动生成托管项是否存在精确重复，防止清理具体子域时误判。
+    const ENABLE_CLIENT_FINGERPRINT    = true;            // TLS 指纹注入开关（为未设置 client-fingerprint 的代理配置批量写入；仅对支持该字段的协议实际生效）
+    const DEFAULT_FINGERPRINT          = "chrome";        // TLS 指纹默认预设（仅对未设置 client-fingerprint 且支持该字段的代理节点生效）
     const FINGERPRINT_SKIP             = [];              // 指纹跳过名单：节点名包含这些关键词（汉字按子串匹配；非汉字按预定义分隔符边界匹配，避免误伤更长子串）
     const PRIMARY_GROUP_NAME           = "";              // tier1：手动精确指定总控代理组名（留空时跳过 tier1，进入 tier2~tier6 自动识别）；填写时必须与代理组名完全一致（区分大小写），仅此一处生效，不做模糊匹配
     const fireflyUseProxy              = ENABLE_FIREFLY && ENABLE_BLOCK;  // 派生开关：决定 Firefly 规则的路由目标与动作（allow层代理 / block层拦截）
@@ -57,8 +57,8 @@ function main(config) {
             newRules.push(rule);
         }
         if (_blockStartLengths.length) {
-            console.error(`❌ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，未自动清理其后内容，以避免误删用户规则`);
-            // 不做自动截断：未闭合 START 后的内容无法安全区分脚本残留与用户规则。为避免误删用户数据，仅报告错误并保留该区域内容；残留规则需由用户人工处理。截断会连带误删损坏点之后
+            console.warn(`⚠️ 检测到 ${_blockStartLengths.length} 个未闭合哨兵块，未自动清理其后内容，以避免误删用户规则`);
+            // 不做自动截断：未闭合 START 后的内容无法安全区分脚本残留与用户规则。为避免误删用户数据，仅报告问题并保留该区域内容；残留规则需由用户人工处理。截断会连带误删损坏点之后
             // 所有与哨兵块无关的用户规则，是不可逆的静默数据丢失，代价高于"孤儿注入内容永久滞留"这个影响较小、且用户自己能在配置里看到并手动清理的问题。因此仅记录错误，不自动处理。
         }
         if (_orphanEndCount) console.warn(`⚠️ ${_orphanEndCount} 个孤立 END`);
@@ -135,7 +135,7 @@ function main(config) {
     let proxyGroupName = null;
     // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为后面的 Hosts DNS 覆写节需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
     const BACKDOOR_BASE_DOMAINS = [
-        "966v26.com",                            // 后门裸域（覆盖该域及其所有子域，如 api./status. 等子域）
+        "966v26.com",                            // 后门裸域：后续分别用于 DOMAIN-SUFFIX 规则、Hosts 与 Fake-IP 排除（覆盖该域及其所有子域，如 api./status. 等子域）
         "vposy.com",                             // 非官方修改补丁作者关联域名
         "api.pzz.cn",                            // 国内后门回传接口（主动上报数据的 API 端点）
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
@@ -165,7 +165,7 @@ function main(config) {
     }
 
     // ═══════════════ 基础控制字符集（清洗和校验共用） ═══════════════
-    const _CONTROL_CHARS = "\u0000-\u001F\u007F\u0085\u00AD\u061C\u2000-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF"; // \u2000-\u200A 为空白字符（如 EN QUAD），出现在名称中间时不受 .trim() 影响
+    const _CONTROL_CHARS = "\u0000-\u001F\u007F\u0085\u00AD\u061C\u2000-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF"; // U+2000–U+200F：包含 Unicode 空白及相关格式字符；出现在名称中间位置时不会由 .trim() 处理
 
     const _SANITIZE_RE = new RegExp(`[${_CONTROL_CHARS}]`, "gu");
     const sanitizeName = n => (typeof n === "string" && n) ? n.replace(_SANITIZE_RE, '').trim() : "";
@@ -234,7 +234,7 @@ function main(config) {
         };
 
         // tier（层级）多级降级识别：tier1 优先采用手动精确指定，tier2 匹配名称含关键词的合格策略组，tier3 包含 include-all，tier4 放宽名称限制，tier5 降级使用兜底组，tier6 最终容错
-        // tier1: 手动精确指定（PRIMARY_GROUP_NAME 非空时）——跳过 tier2~tier6 的启发式识别，直接验证用户指定组，把选择权交还给用户
+        // tier1：手动精确指定（PRIMARY_GROUP_NAME 非空时）——指定组验证成功后直接采用并跳过 tier2~tier6 的启发式识别；验证失败则回退自动识别
         let entry = null;
         if (PRIMARY_GROUP_NAME) {
             const _hit = prepped.find(e => e.g?.name === PRIMARY_GROUP_NAME);
@@ -373,7 +373,7 @@ function main(config) {
     ];
 
     // ── UDP / QUIC 拦截（为 TCP 回退提供条件）──
-    // ⚠️ 当 ENABLE_BLOCK=true 时，UDP 流量在 block 层已被 udpBlock 拦截（REJECT），因此 direct 层的 fonts/color/assets 规则对 UDP 永远不可达，实际只走 TCP DIRECT。
+    // ⚠️ 当 ENABLE_BLOCK=true 时，相关 UDP 流量在 block 层已被 udpBlock 拦截（REJECT），因此 direct 层的 fonts/color/assets 规则不会直接匹配这些 UDP；支持 TCP 回退的客户端在回退后才可能命中对应的 TCP DIRECT 规则。
     // 使用 REJECT 而非 REJECT-DROP，目的是让 QUIC 立即失败以加速回退 TCP，避免静默丢弃导致超时等待，拖慢 Firefly 等放行服务的首次连接速度。
     const udpBlock = [
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.io)),REJECT",
@@ -401,7 +401,7 @@ function main(config) {
         "senseimds.adobe.io",                     // Sensei 模型分发服务
     ];
     // 运行时检查：pushFirefly 只对上面这些域名生成 TCP 限定规则，UDP/QUIC 依赖 udpBlock 的 adobe.io/adobe.com 无协议限定规则兜底拦截——因此这里的每一项都必须落在 adobe.com 
-    // 或 adobe.io 之下，否则该域名的 UDP 流量在 Firefly 禁用时会漏拦，在启用时无法被 udpBlock 强制拦截（可能直连或走代理，具体走向不确定，破坏强制回退 TCP 的设计意图）。
+    // 或 adobe.io 之下，否则该域名的 UDP 流量在 Firefly 禁用时会漏拦，在启用时无法由 udpBlock 提供预期的 UDP 拒绝与 TCP 回退条件。
     {
         const _uncovered = adobeFireflyOnly.filter(d => !/\.(adobe\.com|adobe\.io)$/i.test(d));
         if (_uncovered.length) {
@@ -690,11 +690,11 @@ function main(config) {
     const globalKeyword = ["telemetry", "analytics", "stats", "metrics"]; // ⚠️ 慎用：存在误匹配风险，仅建议临时排查，不建议长期启用
 
     // ── 进程规则（需 TUN + 管理员权限）──
-    // 注：规则中 REJECT-DROP（静默丢弃）用于让目标进程“感知不到”网络，REJECT（立即拒绝连接）TCP 场景通常表现为快速失败，具体行为随传输协议而异；选择依据是进程对网络超时的敏感度。
+    // 注：规则中 REJECT-DROP（静默丢弃请求）不主动返回拒绝结果；REJECT（立即拒绝连接）TCP 场景通常表现为快速失败，具体表现取决于传输协议及应用自身的重试/超时策略。选择依据是进程对网络超时的敏感度。
     const processBlockRules = [
         // "AND,((NETWORK,UDP),(DST-PORT,443),(PROCESS-NAME,AdobeGCClient.exe)),REJECT-DROP", // 仅 UDP 443
         // "AND,((NETWORK,UDP),(PROCESS-NAME,AdobeGCClient.exe)),REJECT-DROP", // 全部 UDP
-        "PROCESS-NAME,AdobeGCClient.exe,REJECT-DROP",        // Adobe 正版验证，除 allow 层白名单域名外全部拦截（TCP+UDP），兜底未知激活域
+        "PROCESS-NAME,AdobeGCClient.exe,REJECT-DROP",        // Adobe 正版验证进程；在前置域名规则未命中时，兜底拦截其未知激活流量（TCP+UDP）
         "PROCESS-NAME,AdskLicensingService.exe,REJECT-DROP", // Autodesk 许可验证
         "PROCESS-NAME,AdskAccess.exe,REJECT-DROP",           // Autodesk 访问控制
         "PROCESS-NAME,AdskIdentityManager.exe,REJECT-DROP",  // Autodesk 身份认证
@@ -768,7 +768,7 @@ function main(config) {
         // 基础设施
         "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",       // NTP 时间同步（仅 TUN 模式有效）
         // 游戏平台
-        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 主域系直连（含下载 CDN 子域；部分业务子域已被前置规则代理）
+        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 主域系直连（部分业务子域已由前置规则代理，下载/静态资源另由后续 Steam CDN 规则覆盖）
         "DOMAIN-SUFFIX,steamcontent.com,DIRECT",           // Steam 游戏内容分发 CDN（高带宽资源直连）
         "DOMAIN-SUFFIX,steamserver.net,DIRECT",            // Steam 联机对战后端
         "DOMAIN-SUFFIX,steamstatic.com,DIRECT",            // Steam 商店静态资源
@@ -821,7 +821,7 @@ function main(config) {
             }
             for (const x of r) {
                 if (typeof x !== "string" || !x) {
-                    throw new TypeError(`[Script] 层 '${l}' 存在非空字符串以外的规则项`);
+                    throw new TypeError(`[Script] 层 '${l}' 存在空白或非字符串规则项`);
                 }
                 layerPools[l].push(x);
             }
@@ -899,7 +899,7 @@ function main(config) {
             console.log(`   全局关键词阻断: ❌`);
         console.log(`   直连规则: ${ENABLE_DIRECT ? "✅" : "❌"}`);
         console.log(`   Hosts 覆写: ${ENABLE_HOSTS_OVERRIDE ? "✅ [" + HOSTS_MODE + "]" : "❌"}`);
-        console.warn("⚠️ [udpBlock] 规则依赖域名识别（Fake-IP / Sniffer），ECH 导致 SNI 无法获取时，相关 UDP 规则可能无法命中。");
+        console.warn("⚠️ [udpBlock] 规则依赖域名识别（Fake-IP / Sniffer），当目标域名无法被可靠识别（如 ECH 等场景），相关 UDP 规则可能无法命中。");
         console.log(`   ▶ 注入规则条目分层统计:`);
         const _LAYER_LABELS = { allow:"白名单/条件代理优先层", block:"拦截层", process:"进程层", proxy:"代理层", aggressive:"激进层", direct:"直连层" };
         for (const k of LAYER_ORDER) {
@@ -954,11 +954,10 @@ function main(config) {
                 const LEGACY_CLEANUP_ENTRIES = ["api.966v26.com","status.966v26.com","+.cc-cdn.com","cc-cdn.com","*.cc-cdn.com"];
                 const scriptManaged = new Set([...currentManaged, ...LEGACY_CLEANUP_ENTRIES.map(s => s.toLowerCase())]);
 
-                if (DEBUG_FAKEIPFILTER_CLEANUP) {
+                if (DEBUG_FAKEIPFILTER_CLEANUP) { // 精确比较 currentManaged 与历史清理项；仅字符串完全一致时视为重复，避免将具体子域误判为已由通配项覆盖。
                     // 精确匹配：判断该条目是否与 currentManaged（由 BACKDOOR_BASE_DOMAINS 自动生成的 +.d / d / *.d 三种形式）字符串完全相同。
-                    // ⚠️ 注意，这里必须用精确匹配，不能用"是否落在某个活跃域名的通配范围内"这种语义匹配实际负责清理 fake-ip-filter 的逻辑
-                    // （下面的 scriptManaged.has(s)就是精确字符串匹配），二者标准必须一致，否则会出现"语义上已被覆盖，但精确匹配清理不掉"的条目被误判为可删除。
-                    // 典型例子：BACKDOOR_BASE_DOMAINS 里的 "966v26.com" 只会自动生成 "+.966v26.com" 等 3 种形式，
+                    // ⚠️ 注意，这里必须用精确匹配，不能用"是否落在某个活跃域名的通配范围内"这种语义匹配实际负责清理 fake-ip-filter 的逻辑（下面的 scriptManaged.has(s)就是精确字符串匹配），
+                    // 二者标准必须一致，否则会出现"语义上已被覆盖，但精确匹配清理不掉"的条目被误判为可删除。典型例子：BACKDOOR_BASE_DOMAINS 里的 "966v26.com" 只会自动生成 "+.966v26.com" 等 3 种形式，
                     // 并不包含 "api.966v26.com" 这个具体字符串——若把它当作"已被覆盖"从 LEGACY_CLEANUP_ENTRIES 删掉，以后残留在用户 fake-ip-filter 里的这个具体字符串就再也清不掉了。
                     // 当前结果为空，仅表示当前两组字符串没有精确重合，并不代表检查失效
                     const redundant = LEGACY_CLEANUP_ENTRIES.filter(e => currentManaged.has(e.toLowerCase()));
