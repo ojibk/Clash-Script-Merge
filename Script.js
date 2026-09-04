@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260903
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260904
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -135,7 +135,7 @@ function main(config) {
     let proxyGroupName = null;
     // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为后面的 Hosts DNS 覆写节需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
     const BACKDOOR_BASE_DOMAINS = [
-        "966v26.com",                            // 后门裸域：后续分别用于 DOMAIN-SUFFIX 规则、Hosts 与 Fake-IP 排除（覆盖该域及其所有子域，如 api./status. 等子域）
+        "966v26.com",                            // 后门裸域：用于 DOMAIN-SUFFIX、Hosts 与 Fake-IP 排除，覆盖裸域及其所有子域，如 api./status. 等子域
         "vposy.com",                             // 非官方修改补丁作者关联域名
         "api.pzz.cn",                            // 国内后门回传接口（主动上报数据的 API 端点）
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
@@ -165,7 +165,8 @@ function main(config) {
     }
 
     // ═══════════════ 基础控制字符集（清洗和校验共用） ═══════════════
-    const _CONTROL_CHARS = "\u0000-\u001F\u007F\u0085\u00AD\u061C\u2000-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF"; // U+2000–U+200F：包含 Unicode 空白及相关格式字符；出现在名称中间位置时不会由 .trim() 处理
+    const _CONTROL_CHARS = "\u0000-\u001F\u007F\u0085\u00AD\u061C\u2000-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF"; // 用于清除代理组名中可能破坏匹配或规则结构的不可见字符；
+    // .trim() 负责清理首尾可识别空白；此正则额外清理出现在名称中间位置的控制/格式字符。
 
     const _SANITIZE_RE = new RegExp(`[${_CONTROL_CHARS}]`, "gu");
     const sanitizeName = n => (typeof n === "string" && n) ? n.replace(_SANITIZE_RE, '').trim() : "";
@@ -365,7 +366,7 @@ function main(config) {
         // "practivate.adobe.com",                   // 预激活服务。该域名可能已失效，待验证
     ];
 
-    const _ADOBE_RAND_RE = "^[A-Za-z0-9]{8,12}\\.adobe\\.io$"; // 匹配随机8~12位字母/数字.adobe.io 子域
+    const _ADOBE_RAND_RE = "^[A-Za-z0-9]{8,12}\\.adobe\\.io$"; // 匹配符合 8~12 位字母/数字命名模式的 .adobe.io 子域
     // const _ADOBESTATS_RAND_RE = "^[A-Za-z0-9]{10}\\.adobestats\\.io$"; // 匹配随机10位字母/数字子域
     const adobeRegex = [
         `DOMAIN-REGEX,${_ADOBE_RAND_RE},REJECT`,
@@ -374,7 +375,7 @@ function main(config) {
 
     // ── UDP / QUIC 拦截（为 TCP 回退提供条件）──
     // ⚠️ 当 ENABLE_BLOCK=true 时，相关 UDP 流量在 block 层已被 udpBlock 拦截（REJECT），因此 direct 层的 fonts/color/assets 规则不会直接匹配这些 UDP；支持 TCP 回退的客户端在回退后才可能命中对应的 TCP DIRECT 规则。
-    // 使用 REJECT 而非 REJECT-DROP，目的是使 UDP/QUIC 更快失败以加速回退 TCP，避免静默丢弃导致超时等待，拖慢 Firefly 等放行服务的首次连接速度。
+    // 使用 REJECT 而非 REJECT-DROP，目的是使 UDP/QUIC 更快失败，有利于支持失败后自行回退的客户端更快进入 TCP fallback。避免静默丢弃导致超时等待，拖慢 Firefly 等放行服务的首次连接速度。
     const udpBlock = [
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.io)),REJECT",
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.com)),REJECT",
@@ -466,7 +467,7 @@ function main(config) {
         "mirror3.internetdownloadmanager.com",   // 更新镜像服务器 3
         "idm-patch.com",                         // 非官方修改补丁域
         "idm-update.com",                        // 非官方更新域
-        "tonec.com",                             // IDM 开发商官网
+        // "tonec.com",                             // ⚠️ 泛域阻断：IDM 开发商官网
     ];
     const wondershareSuffix = [
         "activation.wondershare.com",             // Wondershare 激活验证入口
@@ -604,7 +605,7 @@ function main(config) {
         "qhimg.com",                             // 奇虎图片 CDN
         "qhupdate.com",                          // 360 强制更新推送
         // 2345
-        "2345.com",                              // 2345 导航/弹窗主域
+        "2345.com",                              // 2345 生态主域：如导航/弹窗等，整体阻断
         "2345.net",                              // 2345 备用域
         "2345p.com",                             // 2345 推广域
         "2345uns.com",                           // 2345 升级推送
@@ -686,7 +687,7 @@ function main(config) {
         "mc.yandex.com",                         // Yandex Metrica 备用域
     ];
 
-    // ── 全局关键词兜底（默认关闭）──
+    // ── 全局关键词兜底（高优先级，默认关闭）──
     const globalKeyword = ["telemetry", "analytics", "stats", "metrics"]; // ⚠️ 慎用：存在误匹配风险，仅建议临时排查，不建议长期启用
 
     // ── 进程规则（需 TUN + 管理员权限）──
@@ -807,7 +808,7 @@ function main(config) {
 
     // ═══════════════ 3. 规则组装与注入 ═══════════════
     {
-        const LAYER_ORDER = Object.freeze(["allow","block","process","proxy","aggressive","direct"]);
+        const LAYER_ORDER = Object.freeze(["allow","block","process","proxy","aggressive","direct"]); // 层序：allow/block 域名规则优先；process 规则仅在前者未命中时生效，属显式策略
         const layerPools = { allow:[], block:[], process:[], proxy:[], aggressive:[], direct:[] };
         const _orderSet = new Set(LAYER_ORDER);
         for (const k of LAYER_ORDER) if (!(k in layerPools)) throw new Error(`[Script] LAYER_ORDER 键 '${k}' 不在 layerPools 中`);
