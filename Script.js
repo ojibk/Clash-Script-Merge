@@ -388,7 +388,7 @@ function main(config) {
     const adobeWsDomain = ["wss.adobe.io"];
 
     // ── Firefly 生成式 AI 专属放行域名 ──
-    // 注意：senseicore.adobe.io 与 senseimds.adobe.io 会被 _ADOBE_RAND_RE 规则（随机 8~12 位字母/数字的 adobe.io 子域）命中
+    // 注意：senseicore.adobe.io 与 senseimds.adobe.io 会被 _ADOBE_RAND_RE 规则（符合 8–12 位字母数字命名模式的 adobe.io 子域）命中
     // 当前依赖 allow 层优先，以规避 block 层误匹配，若调整层序需确保这两个域名不被意外拦截。
     const adobeFireflyOnly = [
         "firefly.adobe.com",                      // Firefly 主服务入口
@@ -687,7 +687,7 @@ function main(config) {
         "mc.yandex.com",                         // Yandex Metrica 备用域
     ];
 
-    // ── 全局关键词兜底（高优先级，默认关闭）──
+    // ── 全局关键词兜底（默认关闭）──
     const globalKeyword = ["telemetry", "analytics", "stats", "metrics"]; // ⚠️ 慎用：存在误匹配风险，仅建议临时排查，不建议长期启用
 
     // ── 进程规则（需 TUN + 管理员权限）──
@@ -769,7 +769,7 @@ function main(config) {
         // 基础设施
         "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",       // NTP 时间同步（仅 TUN 模式有效）
         // 游戏平台
-        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 主域系直连（部分业务子域已由前置规则代理，下载/静态资源另由后续 Steam CDN 规则覆盖）
+        "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 主域系直连（部分业务子域已由前置规则代理）
         "DOMAIN-SUFFIX,steamcontent.com,DIRECT",           // Steam 游戏内容分发 CDN（高带宽资源直连）
         "DOMAIN-SUFFIX,steamserver.net,DIRECT",            // Steam 联机对战后端
         "DOMAIN-SUFFIX,steamstatic.com,DIRECT",            // Steam 商店静态资源
