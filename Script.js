@@ -1,6 +1,6 @@
 /**
  * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260905
- * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
+ * 功能：拦截广告/遥测/正版校验 + 白名单豁免特定 AI 服务（Adobe Firefly），Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
 
@@ -10,7 +10,7 @@ function main(config) {
     // ═══════════════ 配置区（按需调整） ═══════════════
     const ENABLE_SCRIPT                = true;            // 脚本总开关（关闭时仍执行遗留标记清理）
     const ENABLE_BLOCK                 = true;            // 拦截模块
-    const ENABLE_FIREFLY               = true;            // Firefly 专属放行策略（仅 ENABLE_BLOCK=true 时生效；ENABLE_BLOCK=false 时不注入 Firefly 专属规则）
+    const ENABLE_FIREFLY               = true;            // Firefly 专属豁免代理策略（豁免 Adobe 拦截并导向代理组；仅 ENABLE_BLOCK=true 时生效；ENABLE_BLOCK=false 时不注入 Firefly 专属规则）
     const ENABLE_PROCESS_RULE          = true;            // 进程规则（需 TUN + 管理员权限）
     const ENABLE_PROXY                 = true;            // 代理模块
     const ENABLE_AGGRESSIVE            = false;           // 激进阻断（谨慎开启）
