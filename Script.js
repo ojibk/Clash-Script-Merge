@@ -10,7 +10,7 @@ function main(config) {
     // ═══════════════ 配置区（按需调整） ═══════════════
     const ENABLE_SCRIPT                = true;            // 脚本总开关（关闭时仍执行遗留标记清理）
     const ENABLE_BLOCK                 = true;            // 拦截模块
-    const ENABLE_FIREFLY               = true;            // Firefly 放行（需 ENABLE_BLOCK=true）
+    const ENABLE_FIREFLY               = true;            // Firefly 专属放行策略（仅 ENABLE_BLOCK=true 时生效；ENABLE_BLOCK=false 时不注入 Firefly 专属规则）
     const ENABLE_PROCESS_RULE          = true;            // 进程规则（需 TUN + 管理员权限）
     const ENABLE_PROXY                 = true;            // 代理模块
     const ENABLE_AGGRESSIVE            = false;           // 激进阻断（谨慎开启）
@@ -33,7 +33,7 @@ function main(config) {
     if (!Array.isArray(config["proxy-groups"])) config["proxy-groups"] = [];
 
     if (ENABLE_FIREFLY && !ENABLE_BLOCK) console.warn("⚠️ Firefly 放行需 ENABLE_BLOCK=true");
-    if (ENABLE_FIREFLY && ENABLE_AGGRESSIVE && !ENABLE_BLOCK) console.warn("⚠️ ENABLE_BLOCK=false 时 aggressiveRules 会对 adobe.io 无差别 REJECT-DROP，Firefly 的 adobe.io 端点将失去白名单特权并被直接拦截");
+    if (ENABLE_FIREFLY && ENABLE_AGGRESSIVE && !ENABLE_BLOCK) console.warn("⚠️ ENABLE_BLOCK=false 时 aggressiveRules 会对 adobe.io 无差别 REJECT-DROP，Firefly 的 adobe.io 端点将被直接拦截");
     if (ENABLE_PROCESS_RULE && config["find-process-mode"] !== "strict" && config["find-process-mode"] !== "always") {
         console.warn(`⚠️ 进程规则要求 find-process-mode=strict/always，当前 [${config["find-process-mode"] ?? "未设置"}]`);
     }
@@ -96,7 +96,7 @@ function main(config) {
             _rawFP = "none";
         }
 
-        // random = 每次重载配置触发随机指纹，概率：Chrome 50%，Safari 25%，iOS ≈16.7%（即 1/6），Firefox ≈8.3%（即 1/12）
+        // random = 每次重载配置触发随机指纹，概率：Chrome 50%，Safari 25%，iOS ≈16.7%（即 1/6），Firefox ≈8.3%（即 1/12）。注意：random 为脚本级随机（每次重载固定），非 Mihomo 原生随机
         const _effectiveFP = _rawFP === "random"
             ? (() => {
                 const rand = Math.random();
@@ -135,7 +135,7 @@ function main(config) {
     let proxyGroupName = null;
     // BACKDOOR_BASE_DOMAINS 声明于此（而不是留在下面数据层里），是因为后面的 Hosts DNS 覆写节需要在代理组识别失败、下面的 try 提前 throw 的情况下依然能访问到它。
     const BACKDOOR_BASE_DOMAINS = [
-        "966v26.com",                            // 后门裸域：用于 DOMAIN-SUFFIX、Hosts 与 Fake-IP 排除，覆盖裸域及其所有子域，如 api./status. 等子域
+        "966v26.com",                            // 后门裸域：用于 DOMAIN-SUFFIX、Hosts 与 Fake-IP 排除，覆盖裸域及其所有子域，如 api. 与 status. 等子域
         "vposy.com",                             // 非官方修改补丁作者关联域名
         "api.pzz.cn",                            // 国内后门回传接口（主动上报数据的 API 端点）
         // "cc-cdn.com",                         // 【待验证】命名形似 Adobe CC CDN，无抓包证据
@@ -191,8 +191,8 @@ function main(config) {
         };
         const hasAnyNonReservedProxyTarget = g => Array.isArray(g?.proxies) && g.proxies.some(isNonReservedProxyTarget);
 
-        // 节点来源单一数据源（hasNodeSource 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
-        // ⚠️ 设计取舍说明：hasNodeSource 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
+        // 节点来源单一数据源（hasConfiguredNodeSource 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
+        // ⚠️ 设计取舍说明：hasConfiguredNodeSource 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
         //   若组A仅有1个静态节点，组B有50个 provider 节点，some() 对两者均返回 true；在 tier2/tier4 的 find() 中，匹配的第一个检测到节点来源组即被选中，而非“节点最多”的组。
         // 原因：1. 静态节点通常是用户精选的高质量节点，“少而精”可能优于“多而杂”；2. 避免为统计节点总数引入额外遍历开销。
         // ⚠️ 节点来源检测只判断配置中存在一种可接受的节点来源形态：不检查实际节点数量、过滤结果、健康状态或 provider 加载状态。新增节点来源方式时，在此追加 test/desc。
@@ -215,7 +215,7 @@ function main(config) {
             },
             {
                 test: g => g?.["include-all-providers"] === true || g?.["include-all-providers"] === "true",
-                desc: () => "include-all-providers",                   // 包含所有 provider
+                desc: () => "include-all-providers",                   // 包含全部代理集合（proxy providers）
             },
         ];
 
@@ -228,7 +228,7 @@ function main(config) {
             }
         }
 
-        const hasNodeSource = e => NODE_SOURCE_CHECKS.some(c => c.test(e.g));
+        const hasConfiguredNodeSource = e => NODE_SOURCE_CHECKS.some(c => c.test(e.g));
         const _nodeDesc = g => {
             const hit = NODE_SOURCE_CHECKS.find(c => c.test(g));
             return hit ? hit.desc(g) : "未检测到节点来源";
@@ -244,7 +244,7 @@ function main(config) {
             } else if (!_hit.eligible) {
                 // 提前用 eligible 拦一道，避免"这里预选成功、下面排除断言又将其剔除"这种前后矛盾的日志
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 不符合代理组要求（命中保留目标/排除词，或不允许作为总控组），回退到自动识别`);
-            } else if (!VALID_PROXY_TYPES.has(_hit.g?.type) || !hasNodeSource(_hit)) {
+            } else if (!VALID_PROXY_TYPES.has(_hit.g?.type) || !hasConfiguredNodeSource(_hit)) {
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 存在，但类型不受支持或未检测到节点来源（type: ${_hit.g?.type}, ${_nodeDesc(_hit.g)}），回退到自动识别`);
             } else {
                 entry = _hit;
@@ -257,7 +257,7 @@ function main(config) {
         // 无 select 候选、或多个候选类型相同时，胜出者依旧由数组声明顺序决定。
         if (!entry) {
             const _tier2Candidates = prepped.filter(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) &&
-                _KW_RE.test(e.clean) && hasNodeSource(e));
+                _KW_RE.test(e.clean) && hasConfiguredNodeSource(e));
             entry = _tier2Candidates.find(e => e.g?.type === "select") || _tier2Candidates[0];
             if (_tier2Candidates.length > 1) {
                 console.warn(`⚠️ tier2 命中 ${_tier2Candidates.length} 个候选组，已选 [${entry?.g?.name}] (type: ${entry?.g?.type})，`
@@ -266,17 +266,17 @@ function main(config) {
         }
         // tier3: 仅当 tier2 全表落空时，才接受包含 include-all 的合格策略组（此时数组顺序才会成为决定因素）
         if (!entry) entry = prepped.find(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) &&
-            (e.g?.["include-all"] === true || e.g?.["include-all"] === "true") && hasNodeSource(e));
+            (e.g?.["include-all"] === true || e.g?.["include-all"] === "true") && hasConfiguredNodeSource(e));
         // tier4: 放宽名称限制
-        if (!entry) entry = prepped.find(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) && hasNodeSource(e));
+        if (!entry) entry = prepped.find(e => e.eligible && !e.fallback && VALID_PROXY_TYPES.has(e.g?.type) && hasConfiguredNodeSource(e));
         // tier5: 降级使用兜底组
         if (!entry) {
-            entry = prepped.find(e => e.fallback && VALID_PROXY_TYPES.has(e.g?.type) && hasNodeSource(e));
+            entry = prepped.find(e => e.fallback && VALID_PROXY_TYPES.has(e.g?.type) && hasConfiguredNodeSource(e));
             if (entry) console.warn(`⚠️ 降级使用兜底组 [${entry.g.name}]`);
         }
         // tier6: 最终容错
         if (!entry) {
-            entry = prepped.find(e => e.eligible && e.g?.type != null && !NONROUTABLE_TYPES.has(e.g?.type) && hasNodeSource(e));
+            entry = prepped.find(e => e.eligible && e.g?.type != null && !NONROUTABLE_TYPES.has(e.g?.type) && hasConfiguredNodeSource(e));
             if (entry) console.warn(`🚨 已进入最终容错，选取代理组 [${entry.g.name}]`);
         }
 
@@ -401,8 +401,8 @@ function main(config) {
         "senseicore.adobe.io",                    // Sensei AI 服务核心
         "senseimds.adobe.io",                     // Sensei 模型分发服务
     ];
-    // 运行时检查：pushFirefly 只对上面这些域名生成 TCP 限定规则，UDP/QUIC 依赖 udpBlock 的 adobe.io/adobe.com 无协议限定规则兜底拦截——因此这里的每一项都必须落在 adobe.com 
-    // 或 adobe.io 之下，否则该域名的 UDP 流量在 Firefly 禁用时会漏拦，在启用时无法由 udpBlock 提供预期的 UDP 拒绝与 TCP 回退条件。
+    // 运行时检查：pushFirefly 只对上面这些域名生成 TCP 限定规则，UDP/QUIC 依赖 udpBlock 的 adobe.io/adobe.com 无协议限定规则兜底拦截。
+    // 因此这里的每一项都必须落在 adobe.com 或 adobe.io 之下，否则该域名的 UDP/QUIC 流量无法被 udpBlock 覆盖，失去预期的 UDP 快速失败与 TCP 回退条件。
     {
         const _uncovered = adobeFireflyOnly.filter(d => !/\.(adobe\.com|adobe\.io)$/i.test(d));
         if (_uncovered.length) {
@@ -930,7 +930,7 @@ function main(config) {
             const customHosts = Object.fromEntries(hijackDomains.map(d => [d, target]));
             const ensureObj = v => (typeof v === "object" && v !== null && !Array.isArray(v)) ? v : {};
 
-            // 顶层 Hosts：Mihomo 唯一有效入口，独立于 DNS 状态
+            // 顶层 hosts：Mihomo 唯一有效的 hosts 配置字段；运行时是否生效由 use-hosts 控制
             config.hosts = { ...ensureObj(config.hosts), ...customHosts };
 
             // Hosts 配置写入日志（独立，不依赖 DNS 对象状态）
@@ -978,7 +978,7 @@ function main(config) {
                 const newEntries = [...hijackDomains].sort();
                 config.dns["fake-ip-filter"] = [...cleaned, ...newEntries];
 
-                console.log(`   fake-ip-filter 清理旧条目: ${cleanedCount} 条，新增注入: ${newEntries.length} 条（订阅原有非脚本条目共 ${existing.size} 条）`);
+                console.log(`   fake-ip-filter 清理旧条目: ${cleanedCount} 条，新增注入: ${newEntries.length} 条，保留清理后非脚本条目 ${existing.size} 条`);
             }
         } catch (err) {
             console.error("❌ Hosts DNS 覆写失败:", err);
