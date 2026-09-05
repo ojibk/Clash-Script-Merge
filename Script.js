@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260905
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260906
  * 功能：拦截广告/遥测/正版校验 + 白名单豁免特定 AI 服务（Adobe Firefly），Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -33,7 +33,7 @@ function main(config) {
     if (!Array.isArray(config["proxy-groups"])) config["proxy-groups"] = [];
 
     if (ENABLE_FIREFLY && !ENABLE_BLOCK) console.warn("⚠️ Firefly 放行需 ENABLE_BLOCK=true");
-    if (ENABLE_FIREFLY && ENABLE_AGGRESSIVE && !ENABLE_BLOCK) console.warn("⚠️ ENABLE_BLOCK=false 时 aggressiveRules 会对 adobe.io 无差别 REJECT-DROP，Firefly 的 adobe.io 端点将被直接拦截");
+    if (ENABLE_FIREFLY && ENABLE_AGGRESSIVE && !ENABLE_BLOCK) console.warn(`⚠️ ENABLE_BLOCK=false 时 Firefly 专属规则不会注入；若同时启用 ENABLE_AGGRESSIVE，可被识别为 adobe.io 的相关端点将命中 aggressiveRules 的 DOMAIN-SUFFIX 规则并 REJECT-DROP`);
     if (ENABLE_PROCESS_RULE && config["find-process-mode"] !== "strict" && config["find-process-mode"] !== "always") {
         console.warn(`⚠️ 进程规则要求 find-process-mode=strict/always，当前 [${config["find-process-mode"] ?? "未设置"}]`);
     }
@@ -189,7 +189,7 @@ function main(config) {
             const t = p.trim();
             return t !== "" && !_RESERVED_PROXY_TARGETS.has(t.toUpperCase());
         };
-        const hasAnyNonReservedProxyTarget = g => Array.isArray(g?.proxies) && g.proxies.some(isNonReservedProxyTarget);
+        const hasAnyNonReservedProxyTarget = g => Array.isArray(g?.proxies) && g.proxies.some(isNonReservedProxyTarget); // proxies 可以是节点，也可以是其他策略组；此函数不递归。
 
         // 节点来源单一数据源（hasConfiguredNodeSource 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
         // ⚠️ 设计取舍说明：hasConfiguredNodeSource 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
