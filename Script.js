@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260904
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260905
  * 功能：白名单放行特定 AI 服务（Firefly）+ 拦截广告/遥测/激活域名，Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -207,7 +207,7 @@ function main(config) {
             },
             {
                 test: g => g?.["include-all"] === true || g?.["include-all"] === "true",
-                desc: () => "include-all",                             // 包含所有节点和 provider
+                desc: () => "include-all",                             // 纳入全部代理节点及 provider 来源
             },
             {
                 test: g => g?.["include-all-proxies"] === true || g?.["include-all-proxies"] === "true",
@@ -822,7 +822,7 @@ function main(config) {
             }
             for (const x of r) {
                 if (typeof x !== "string" || !x) {
-                    throw new TypeError(`[Script] 层 '${l}' 存在空白或非字符串规则项`);
+                    throw new TypeError(`[Script] 层 '${l}' 存在空字符串或非字符串规则项`);
                 }
                 layerPools[l].push(x);
             }
@@ -930,37 +930,38 @@ function main(config) {
             const customHosts = Object.fromEntries(hijackDomains.map(d => [d, target]));
             const ensureObj = v => (typeof v === "object" && v !== null && !Array.isArray(v)) ? v : {};
 
-            // 注入顶层 hosts（与 dns 状态无关）
+            // 顶层 Hosts：Mihomo 唯一有效入口，独立于 DNS 状态
             config.hosts = { ...ensureObj(config.hosts), ...customHosts };
 
-            // 检查 dns 对象合法性
-            let _dnsValid = false;
+            // Hosts 配置写入日志（独立，不依赖 DNS 对象状态）
+            console.warn("⚠️ Hosts DNS 覆写需在 CVR 开启「启用 DNS」和「使用 Hosts」才生效");
+            console.log("💡 脚本无法检测 UI 层开关状态；此处仅表示已写入配置对象，不代表运行时已生效");
+            const targetStr = Array.isArray(target) ? target.join(" / ") : target;
+            console.log(`🛡️ Hosts DNS 覆写已写入: ${hijackDomains.length} 条，模式: [${HOSTS_MODE}] → ${targetStr}，但需 CVR 开启相关开关才能生效。`);
+
+            // 检查 DNS 对象合法性，仅用于 fake-ip-filter 维护
+            let _dnsObjectValid = false;
+
             if (config.dns == null) {
                 config.dns = {};
-            }
-            if (typeof config.dns === "object" && !Array.isArray(config.dns)) {
-                config.dns.hosts = { ...ensureObj(config.dns.hosts), ...customHosts };
-                _dnsValid = true;
+                _dnsObjectValid = true;
+            } else if (typeof config.dns === "object" && !Array.isArray(config.dns)) {
+                _dnsObjectValid = true;
             } else {
-                console.warn("⚠️ config.dns 类型异常，已写入顶层 hosts，dns.hosts 注入及 fake-ip-filter 维护均已跳过");
+                console.warn("⚠️ config.dns 类型异常，fake-ip-filter 维护已跳过");
             }
-            // 仅当 dns 对象合法时维护 fake-ip-filter
-            if (_dnsValid) {
+
+            // 仅当 DNS 对象合法时维护 fake-ip-filter
+            if (_dnsObjectValid) {
                 if (!Array.isArray(config.dns["fake-ip-filter"])) {
                     config.dns["fake-ip-filter"] = [];
                 }
 
                 const currentManaged = new Set(BACKDOOR_BASE_DOMAINS.flatMap(d => [`+.${d}`, d, `*.${d}`]).map(s => s.toLowerCase()));
-                // 确认订阅中已无这些条目后可安全删除
                 const LEGACY_CLEANUP_ENTRIES = ["api.966v26.com","status.966v26.com","+.cc-cdn.com","cc-cdn.com","*.cc-cdn.com"];
                 const scriptManaged = new Set([...currentManaged, ...LEGACY_CLEANUP_ENTRIES.map(s => s.toLowerCase())]);
 
-                if (DEBUG_FAKEIPFILTER_CLEANUP) { // 精确比较 currentManaged 与历史清理项；仅字符串完全一致时视为重复，避免将具体子域误判为已由通配项覆盖。
-                    // 精确匹配：判断该条目是否与 currentManaged（由 BACKDOOR_BASE_DOMAINS 自动生成的 +.d / d / *.d 三种形式）字符串完全相同。
-                    // ⚠️ 注意，这里必须用精确匹配，不能用"是否落在某个活跃域名的通配范围内"这种语义匹配实际负责清理 fake-ip-filter 的逻辑（下面的 scriptManaged.has(s)就是精确字符串匹配），
-                    // 二者标准必须一致，否则会出现"语义上已被覆盖，但精确匹配清理不掉"的条目被误判为可删除。典型例子：BACKDOOR_BASE_DOMAINS 里的 "966v26.com" 只会自动生成 "+.966v26.com" 等 3 种形式，
-                    // 并不包含 "api.966v26.com" 这个具体字符串——若把它当作"已被覆盖"从 LEGACY_CLEANUP_ENTRIES 删掉，以后残留在用户 fake-ip-filter 里的这个具体字符串就再也清不掉了。
-                    // 当前结果为空，仅表示当前两组字符串没有精确重合，并不代表检查失效
+                if (DEBUG_FAKEIPFILTER_CLEANUP) {
                     const redundant = LEGACY_CLEANUP_ENTRIES.filter(e => currentManaged.has(e.toLowerCase()));
                     if (redundant.length) console.warn("⚠️ 历史托管域名中存在与当前自动生成集合完全重复的冗余条目，将自动清理:", redundant);
                 }
@@ -977,10 +978,6 @@ function main(config) {
                 const newEntries = [...hijackDomains].sort();
                 config.dns["fake-ip-filter"] = [...cleaned, ...newEntries];
 
-                console.warn("⚠️ Hosts DNS 覆写需在 CVR 开启「启用 DNS」和「使用 Hosts」才生效");
-                console.log("💡 脚本无法检测 UI 层开关状态；未开启时仍打印写入完成日志");
-                const targetStr = Array.isArray(target) ? target.join(" / ") : target;
-                console.log(`🛡️ Hosts DNS 覆写已写入: ${hijackDomains.length} 条，模式: [${HOSTS_MODE}] → ${targetStr}，但需 CVR 开启相关开关才能生效。`);
                 console.log(`   fake-ip-filter 清理旧条目: ${cleanedCount} 条，新增注入: ${newEntries.length} 条（订阅原有非脚本条目共 ${existing.size} 条）`);
             }
         } catch (err) {
