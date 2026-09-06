@@ -406,7 +406,7 @@ function main(config) {
     {
         const _uncovered = adobeFireflyOnly.filter(d => !/\.(adobe\.com|adobe\.io)$/i.test(d));
         if (_uncovered.length) {
-            console.error(`❌ adobeFireflyOnly 存在无法被 udpBlock 覆盖的域名，UDP/QUIC 将失去预期的 TCP 回退保护条件: ${_uncovered.join(", ")}`);
+            console.error(`❌ adobeFireflyOnly 存在无法被 udpBlock 覆盖的域名，相关 UDP/QUIC 流量将失去预期的 TCP fallback 条件: ${_uncovered.join(", ")}`);
         }
     }
 
@@ -959,11 +959,13 @@ function main(config) {
 
                 const currentManaged = new Set(BACKDOOR_BASE_DOMAINS.flatMap(d => [`+.${d}`, d, `*.${d}`]).map(s => s.toLowerCase()));
                 const LEGACY_CLEANUP_ENTRIES = ["api.966v26.com","status.966v26.com","+.cc-cdn.com","cc-cdn.com","*.cc-cdn.com"];
-                const scriptManaged = new Set([...currentManaged, ...LEGACY_CLEANUP_ENTRIES.map(s => s.toLowerCase())]);
+                const scriptCleanupEntries = new Set([...currentManaged, ...LEGACY_CLEANUP_ENTRIES.map(s => s.toLowerCase())]);
 
                 if (DEBUG_FAKEIPFILTER_CLEANUP) {
+                    // DEBUG：检查当前管理条目与历史清理条目的精确交集；结果为空≠检查失效。
+                    // 语义覆盖不等于字符串存在：966v26.com 的生成形式不包含 api.966v26.com，勿据此删除对应 LEGACY_CLEANUP_ENTRIES。
                     const redundant = LEGACY_CLEANUP_ENTRIES.filter(e => currentManaged.has(e.toLowerCase()));
-                    if (redundant.length) console.warn("⚠️ 历史托管域名中存在与当前自动生成集合完全重复的冗余条目，将自动清理:", redundant);
+                    if (redundant.length) console.warn("⚠️ 历史托管域名中存在与当前自动生成集合完全重复的冗余条目，建议手动从 LEGACY_CLEANUP_ENTRIES 中移除", redundant);
                 }
 
                 const existing = new Set(), cleaned = [];
@@ -971,7 +973,7 @@ function main(config) {
                 for (const e of config.dns["fake-ip-filter"]) {
                     const s = (typeof e === "string" ? e.trim() : "").toLowerCase();
                     if (!s) continue;
-                    if (scriptManaged.has(s)) { cleanedCount++; continue; }
+                    if (scriptCleanupEntries.has(s)) { cleanedCount++; continue; }
                     if (existing.has(s)) continue;
                     existing.add(s); cleaned.push(e);
                 }
