@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260906
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260908
  * 功能：拦截广告/遥测/正版校验 + 白名单豁免特定 AI 服务（Adobe Firefly），Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -11,7 +11,7 @@ function main(config) {
     const ENABLE_SCRIPT                = true;            // 脚本总开关（关闭时仍执行遗留标记清理）
     const ENABLE_BLOCK                 = true;            // 拦截模块
     const ENABLE_FIREFLY               = true;            // Firefly 专属豁免代理策略（豁免 Adobe 拦截并导向代理组；仅 ENABLE_BLOCK=true 时生效；ENABLE_BLOCK=false 时不注入 Firefly 专属规则）
-    const ENABLE_PROCESS_RULE          = true;            // 进程规则（需 TUN + 管理员权限）
+    const ENABLE_PROCESS_RULE          = true;            // 进程规则（需满足 Mihomo 的进程识别与流量接管条件；Windows 下通常还需 TUN + 管理员权限）
     const ENABLE_PROXY                 = true;            // 代理模块
     const ENABLE_AGGRESSIVE            = false;           // 激进阻断（谨慎开启）
     const ENABLE_GLOBAL_KEYWORD_BLOCK  = false;           // 全局关键词阻断（极度激进）
@@ -191,11 +191,11 @@ function main(config) {
         };
         const hasAnyNonReservedProxyTarget = g => Array.isArray(g?.proxies) && g.proxies.some(isNonReservedProxyTarget); // proxies 可以是节点，也可以是其他策略组；此函数不递归。
 
-        // 节点来源单一数据源（hasConfiguredNodeSource 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
+        // 配置节点来源单一数据源（hasConfiguredNodeSource 和 _nodeDesc 共用）；新增引入方式时在此追加记录即可。
         // ⚠️ 设计取舍说明：hasConfiguredNodeSource 使用 some() 按数组顺序短路判断，仅检查“是否至少有一个来源能提供节点”，不比较不同组的节点数量。这意味着：
         //   若组A仅有1个静态节点，组B有50个 provider 节点，some() 对两者均返回 true；在 tier2/tier4 的 find() 中，匹配的第一个检测到节点来源组即被选中，而非“节点最多”的组。
         // 原因：1. 静态节点通常是用户精选的高质量节点，“少而精”可能优于“多而杂”；2. 避免为统计节点总数引入额外遍历开销。
-        // ⚠️ 节点来源检测只判断配置中存在一种可接受的节点来源形态：不检查实际节点数量、过滤结果、健康状态或 provider 加载状态。新增节点来源方式时，在此追加 test/desc。
+        // ⚠️ 配置节点来源检测只判断配置中存在一种可接受的节点来源形态：不检查实际节点数量、过滤结果、健康状态或 provider 加载状态。新增节点来源方式时，在此追加 test/desc。
         const NODE_SOURCE_CHECKS = [
             {
                 test: g => hasAnyNonReservedProxyTarget(g),
@@ -231,7 +231,7 @@ function main(config) {
         const hasConfiguredNodeSource = e => NODE_SOURCE_CHECKS.some(c => c.test(e.g));
         const _nodeDesc = g => {
             const hit = NODE_SOURCE_CHECKS.find(c => c.test(g));
-            return hit ? hit.desc(g) : "未检测到节点来源";
+            return hit ? hit.desc(g) : "未检测到配置节点来源";
         };
 
         // tier（层级）多级降级识别：tier1 优先采用手动精确指定，tier2 匹配名称含关键词的合格策略组，tier3 包含 include-all，tier4 放宽名称限制，tier5 降级使用兜底组，tier6 最终容错
@@ -245,7 +245,7 @@ function main(config) {
                 // 提前用 eligible 拦一道，避免"这里预选成功、下面排除断言又将其剔除"这种前后矛盾的日志
                 console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 不符合代理组要求（命中保留目标/排除词，或不允许作为总控组），回退到自动识别`);
             } else if (!VALID_PROXY_TYPES.has(_hit.g?.type) || !hasConfiguredNodeSource(_hit)) {
-                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 存在，但类型不受支持或未检测到节点来源（type: ${_hit.g?.type}, ${_nodeDesc(_hit.g)}），回退到自动识别`);
+                console.warn(`⚠️ PRIMARY_GROUP_NAME=[${PRIMARY_GROUP_NAME}] 存在，但类型不受支持或未检测到配置节点来源（type: ${_hit.g?.type}, ${_nodeDesc(_hit.g)}），回退到自动识别`);
             } else {
                 entry = _hit;
                 console.log(`✅ 代理组（手动指定 PRIMARY_GROUP_NAME）: [${entry.g.name}]`);
@@ -366,11 +366,11 @@ function main(config) {
         // "practivate.adobe.com",                   // 预激活服务。该域名可能已失效，待验证
     ];
 
-    const _ADOBE_RAND_RE = "^[A-Za-z0-9]{8,12}\\.adobe\\.io$"; // 匹配符合 8~12 位字母/数字命名模式的 .adobe.io 子域
-    // const _ADOBESTATS_RAND_RE = "^[A-Za-z0-9]{10}\\.adobestats\\.io$"; // 匹配符合 10 位字母/数字命名模式的 .adobestats.io 子域
+    const _ADOBE_ALNUM_SUBDOMAIN_RE = "^[A-Za-z0-9]{8,12}\\.adobe\\.io$"; // 匹配符合 8~12 位字母/数字命名模式的 .adobe.io 子域
+    // const _ADOBESTATS_ALNUM_SUBDOMAIN_RE = "^[A-Za-z0-9]{10}\\.adobestats\\.io$"; // 匹配符合 10 位字母/数字命名模式的 .adobestats.io 子域
     const adobeRegex = [
-        `DOMAIN-REGEX,${_ADOBE_RAND_RE},REJECT`,
-        // `DOMAIN-REGEX,${_ADOBESTATS_RAND_RE},REJECT`, // 已被 adobeSuffix 的 "adobestats.io" 规则遮蔽
+        `DOMAIN-REGEX,${_ADOBE_ALNUM_SUBDOMAIN_RE},REJECT`,
+        // `DOMAIN-REGEX,${_ADOBESTATS_ALNUM_SUBDOMAIN_RE},REJECT`, // 已被 adobeSuffix 的 "adobestats.io" 规则遮蔽
     ];
 
     // ── UDP / QUIC 拦截（为 TCP 回退提供条件）──
@@ -381,14 +381,14 @@ function main(config) {
         "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobe.com)),REJECT",
         // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobelogin.com)),REJECT", // ⚠️ Firefly 禁用时由 adobeSharedDeps 里的 "ims-na1.adobelogin.com" 用 pushSuffix（无协议限定）子域规则覆盖，Firefly 启用时 UDP 由 allow 层路由至代理组
         // "AND,((NETWORK,UDP),(DOMAIN-SUFFIX,adobestats.io)),REJECT", // SUFFIX 规则的 adobestats.io（无协议条件）已覆盖所有协议，此处冗余
-        // `AND,((NETWORK,UDP),(DOMAIN-REGEX,${_ADOBE_RAND_RE})),REJECT`, // 已被同层 adobe.io 的 UDP SUFFIX 规则覆盖，此处冗余
+        // `AND,((NETWORK,UDP),(DOMAIN-REGEX,${_ADOBE_ALNUM_SUBDOMAIN_RE})),REJECT`, // 已被同层 adobe.io 的 UDP SUFFIX 规则覆盖，此处冗余
     ];
 
     // ── Adobe 遥测子域（wss 为子域名前缀，非协议标识）──
     const adobeWsDomain = ["wss.adobe.io"];
 
     // ── Firefly 生成式 AI 专属放行域名 ──
-    // 注意：senseicore.adobe.io 与 senseimds.adobe.io 会被 _ADOBE_RAND_RE 规则（符合 8–12 位字母数字命名模式的 adobe.io 子域）命中
+    // 注意：senseicore.adobe.io 与 senseimds.adobe.io 会被 _ADOBE_ALNUM_SUBDOMAIN_RE 规则（符合 8–12 位字母数字命名模式的 adobe.io 子域）命中
     // 当前依赖 allow 层优先，以规避 block 层误匹配，若调整层序需确保这两个域名不被意外拦截。
     const adobeFireflyOnly = [
         "firefly.adobe.com",                      // Firefly 主服务入口
@@ -401,8 +401,8 @@ function main(config) {
         "senseicore.adobe.io",                    // Sensei AI 服务核心
         "senseimds.adobe.io",                     // Sensei 模型分发服务
     ];
-    // 运行时检查：pushFirefly 只对上面这些域名生成 TCP 限定规则，UDP/QUIC 依赖 udpBlock 的 adobe.io/adobe.com 无协议限定规则兜底拦截。
-    // 因此这里的每一项都必须落在 adobe.com 或 adobe.io 之下，否则该域名的 UDP/QUIC 流量无法被 udpBlock 覆盖，失去预期的 UDP 快速失败与 TCP 回退条件。
+    // 运行时检查：pushFirefly 只对上面这些域名生成 TCP 限定规则，UDP/QUIC 依赖 udpBlock 的 adobe.io/adobe.com 无协议限定规则兜底拦截。因此这里的每一项都必须落在 adobe.com 或 adobe.io 之下，
+    // 否则该域名的 UDP/QUIC 流量无法被 udpBlock 覆盖，失去预期的 UDP 快速失败与 TCP 回退条件。⚠️ 注意：即使域名属于上述域，若因 ECH 等原因导致域名无法被可靠识别，相关 UDP 规则仍可能失效，Firefly 同样受此限制。
     {
         const _uncovered = adobeFireflyOnly.filter(d => !/\.(adobe\.com|adobe\.io)$/i.test(d));
         if (_uncovered.length) {
@@ -690,7 +690,7 @@ function main(config) {
     // ── 全局关键词兜底（默认关闭）──
     const globalKeyword = ["telemetry", "analytics", "stats", "metrics"]; // ⚠️ 慎用：存在误匹配风险，仅建议临时排查，不建议长期启用
 
-    // ── 进程规则（需 TUN + 管理员权限）──
+    // ── 进程规则（需满足 Mihomo 的进程识别与流量接管条件；Windows 下通常还需 TUN + 管理员权限）──
     // 注：规则中 REJECT-DROP（静默丢弃请求）不主动返回拒绝结果；REJECT（立即拒绝连接）TCP 场景通常表现为快速失败，具体表现取决于传输协议及应用自身的重试/超时策略。选择依据是进程对网络超时的敏感度。
     const processBlockRules = [
         // "AND,((NETWORK,UDP),(DST-PORT,443),(PROCESS-NAME,AdobeGCClient.exe)),REJECT-DROP", // 仅 UDP 443
@@ -767,7 +767,7 @@ function main(config) {
         "DOMAIN-SUFFIX,autodesk.com,DIRECT",               // Autodesk 官网放行（下载/论坛）
         "DOMAIN-SUFFIX,corel.com,DIRECT",                  // Corel 官网放行
         // 基础设施
-        "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",       // NTP 时间同步（仅 TUN 模式有效）
+        "AND,((NETWORK,UDP),(DST-PORT,123)),DIRECT",       // NTP 时间同步：对被 Mihomo 接管的 UDP/123 流量生效
         // 游戏平台
         "DOMAIN-SUFFIX,steampowered.com,DIRECT",           // Steam 主域系直连（部分业务子域已由前置规则代理）
         "DOMAIN-SUFFIX,steamcontent.com,DIRECT",           // Steam 游戏内容分发 CDN（高带宽资源直连）
@@ -882,7 +882,7 @@ function main(config) {
         } else {
             console.log(`   Firefly 放行: ❌`);
         }
-        console.log(`   进程规则: ${ENABLE_PROCESS_RULE ? "✅ (需管理员权限+TUN)" : "❌"}`);
+        console.log(`   进程规则: ${ENABLE_PROCESS_RULE ? "✅ (需满足进程识别与流量接管条件，如：管理员权限+TUN)" : "❌"}`);
         console.log(`   代理规则: ${ENABLE_PROXY ? "✅" : "❌"}`);
         if (ENABLE_AGGRESSIVE) {
             console.warn(`   激进阻断: ⚠️ 已开启`);
@@ -900,7 +900,7 @@ function main(config) {
             console.log(`   全局关键词阻断: ❌`);
         console.log(`   直连规则: ${ENABLE_DIRECT ? "✅" : "❌"}`);
         console.log(`   Hosts 覆写: ${ENABLE_HOSTS_OVERRIDE ? "✅ [" + HOSTS_MODE + "]" : "❌"}`);
-        console.warn("⚠️ [udpBlock] 规则依赖域名识别（Fake-IP / Sniffer），当目标域名无法被可靠识别（如 ECH 等场景），相关 UDP 规则可能无法命中。");
+        console.warn("⚠️ [udpBlock] 规则依赖域名识别（Fake-IP / Sniffer），当目标域名无法被可靠识别（如 ECH 等场景），相关 UDP 规则可能无法命中，Firefly 的 UDP/QUIC 强制回退效果也会受影响。");
         console.log(`   ▶ 注入规则条目分层统计:`);
         const _LAYER_LABELS = { allow:"白名单/条件代理优先层", block:"拦截层", process:"进程层", proxy:"代理层", aggressive:"激进层", direct:"直连层" };
         for (const k of LAYER_ORDER) {
