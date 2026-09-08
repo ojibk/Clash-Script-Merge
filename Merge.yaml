@@ -22,7 +22,7 @@ dns:
   listen: 0.0.0.0:53                     # 监听所有 IPv4 接口的 53 端口，供 TUN DNS 劫持或系统 DNS 指向使用。 ⚠️ 安全风险：若不需要向局域网提供 DNS 服务，建议改为 127.0.0.1:53
   # listen: 127.0.0.1:53                   # 仅监听本机回环接口，供 TUN DNS 劫持或系统 DNS 指向使用。⚠️ 避免向局域网暴露 DNS 服务
   enhanced-mode: fake-ip                 # 与 sniffer 联动，Fake-IP 下规则匹配更精确
-  fake-ip-filter-mode: blacklist         # Fake-IP 排除模式。可选值：blacklist/whitelist/rule
+  fake-ip-filter-mode: blacklist         # Fake-IP 过滤名单模式。可选值：blacklist/whitelist/rule
   ipv6: false                            # 关闭 IPv6，避免纯 IPv4 代理环境下连接错误，若全链路支持 IPv6 且代理可出站，可改为 true
 
   # ── Fake-IP 范围 ──
