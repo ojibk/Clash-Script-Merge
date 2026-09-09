@@ -1,5 +1,5 @@
 /**
- * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260908
+ * Clash-Script 全局扩展脚本 · 基于哨兵标记的规则幂等注入 v260909
  * 功能：拦截广告/遥测/正版校验 + 白名单豁免特定 AI 服务（Adobe Firefly），Hosts DNS 覆写，TLS 指纹注入等。
  * 使用：调整顶部配置区开关，在对应数组中增删域名，保存后重载订阅即可生效。
  */
@@ -951,36 +951,56 @@ function main(config) {
                 console.warn("⚠️ config.dns 类型异常，fake-ip-filter 维护已跳过");
             }
 
-            // 仅当 DNS 对象合法时维护 fake-ip-filter
+            // 仅当 DNS 对象合法且 fake-ip-filter-mode 为 blacklist（默认）时维护 fake-ip-filter
             if (_dnsObjectValid) {
-                if (!Array.isArray(config.dns["fake-ip-filter"])) {
-                    config.dns["fake-ip-filter"] = [];
+                // 读取并规范化模式；未配置时按 Mihomo 默认值 blacklist 处理
+                const rawFakeIPFilterMode = config.dns["fake-ip-filter-mode"];
+                const fakeIPFilterMode =
+                    rawFakeIPFilterMode == null
+                        ? "blacklist"
+                        : typeof rawFakeIPFilterMode === "string"
+                            ? rawFakeIPFilterMode.trim().toLowerCase()
+                            : "";
+
+                if (fakeIPFilterMode !== "blacklist") {
+                    console.warn(
+                        `⚠️ fake-ip-filter-mode=${String(rawFakeIPFilterMode)}，非 blacklist 模式，脚本跳过 fake-ip-filter 维护以避免改变其语义`
+                    );
+                } else {
+                    if (config.dns["fake-ip-filter"] == null) {
+                        // 字段缺失，创建空数组供脚本维护
+                        config.dns["fake-ip-filter"] = [];
+                    } else if (!Array.isArray(config.dns["fake-ip-filter"])) {
+                        // 字段存在但类型异常，跳过维护以免覆盖用户配置
+                        console.warn("⚠️ fake-ip-filter 类型异常，跳过维护以避免覆盖用户配置");
+                    } else {
+                        // 字段为数组，正常执行清理与注入
+                        const currentManaged = new Set(BACKDOOR_BASE_DOMAINS.flatMap(d => [`+.${d}`, d, `*.${d}`]).map(s => s.toLowerCase()));
+                        const LEGACY_CLEANUP_ENTRIES = ["api.966v26.com","status.966v26.com","+.cc-cdn.com","cc-cdn.com","*.cc-cdn.com"];
+                        const scriptCleanupEntries = new Set([...currentManaged, ...LEGACY_CLEANUP_ENTRIES.map(s => s.toLowerCase())]);
+
+                        if (DEBUG_FAKEIPFILTER_CLEANUP) {
+                            // DEBUG：检查当前管理条目与历史清理条目的精确交集；结果为空≠检查失效。
+                            // 语义覆盖不等于字符串存在：966v26.com 的生成形式不包含 api.966v26.com，勿据此删除对应 LEGACY_CLEANUP_ENTRIES。
+                            const redundant = LEGACY_CLEANUP_ENTRIES.filter(e => currentManaged.has(e.toLowerCase()));
+                            if (redundant.length) console.warn("⚠️ 历史托管域名中存在与当前自动生成集合完全重复的冗余条目，建议手动从 LEGACY_CLEANUP_ENTRIES 中移除", redundant);
+                        }
+
+                        const existing = new Set(), cleaned = [];
+                        let cleanedCount = 0;
+                        for (const e of config.dns["fake-ip-filter"]) {
+                            const s = (typeof e === "string" ? e.trim() : "").toLowerCase();
+                            if (!s) continue;
+                            if (scriptCleanupEntries.has(s)) { cleanedCount++; continue; }
+                            if (existing.has(s)) continue;
+                            existing.add(s); cleaned.push(e);
+                        }
+                        const newEntries = [...hijackDomains].sort();
+                        config.dns["fake-ip-filter"] = [...cleaned, ...newEntries];
+
+                        console.log(`   fake-ip-filter 清理旧条目: ${cleanedCount} 条，新增注入: ${newEntries.length} 条，保留清理后非脚本条目 ${existing.size} 条`);
+                    }
                 }
-
-                const currentManaged = new Set(BACKDOOR_BASE_DOMAINS.flatMap(d => [`+.${d}`, d, `*.${d}`]).map(s => s.toLowerCase()));
-                const LEGACY_CLEANUP_ENTRIES = ["api.966v26.com","status.966v26.com","+.cc-cdn.com","cc-cdn.com","*.cc-cdn.com"];
-                const scriptCleanupEntries = new Set([...currentManaged, ...LEGACY_CLEANUP_ENTRIES.map(s => s.toLowerCase())]);
-
-                if (DEBUG_FAKEIPFILTER_CLEANUP) {
-                    // DEBUG：检查当前管理条目与历史清理条目的精确交集；结果为空≠检查失效。
-                    // 语义覆盖不等于字符串存在：966v26.com 的生成形式不包含 api.966v26.com，勿据此删除对应 LEGACY_CLEANUP_ENTRIES。
-                    const redundant = LEGACY_CLEANUP_ENTRIES.filter(e => currentManaged.has(e.toLowerCase()));
-                    if (redundant.length) console.warn("⚠️ 历史托管域名中存在与当前自动生成集合完全重复的冗余条目，建议手动从 LEGACY_CLEANUP_ENTRIES 中移除", redundant);
-                }
-
-                const existing = new Set(), cleaned = [];
-                let cleanedCount = 0;
-                for (const e of config.dns["fake-ip-filter"]) {
-                    const s = (typeof e === "string" ? e.trim() : "").toLowerCase();
-                    if (!s) continue;
-                    if (scriptCleanupEntries.has(s)) { cleanedCount++; continue; }
-                    if (existing.has(s)) continue;
-                    existing.add(s); cleaned.push(e);
-                }
-                const newEntries = [...hijackDomains].sort();
-                config.dns["fake-ip-filter"] = [...cleaned, ...newEntries];
-
-                console.log(`   fake-ip-filter 清理旧条目: ${cleanedCount} 条，新增注入: ${newEntries.length} 条，保留清理后非脚本条目 ${existing.size} 条`);
             }
         } catch (err) {
             console.error("❌ Hosts DNS 覆写失败:", err);
